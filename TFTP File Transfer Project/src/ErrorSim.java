@@ -53,7 +53,7 @@ class Listener implements Runnable {
 	    		System.out.println("Waiting for client...");
 	    	}
 	    
-	    	try { //Wait for a packet to come in from the client
+	    	try { //Wait for a packet to come in from the client.
 	    		receiveSocket.receive(receivePacket);
 	    	} catch(IOException e) {
 	    		e.printStackTrace();
