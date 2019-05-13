@@ -42,7 +42,7 @@ class Listener implements Runnable {
 	}
 	
 	public void run(){
-		byte data[] = new byte[100]; //<--- THIS SIZE SHOULD BE CHANGED, NEED TO DECIDE WHAT IT SHOULD BE
+		byte data[] = new byte[516];
 	    DatagramPacket receivePacket = new DatagramPacket(data, data.length);
 	    DatagramPacket sendPacket;
 	    InetAddress clientAddress;
@@ -56,8 +56,11 @@ class Listener implements Runnable {
 	    	try { //Wait for a packet to come in from the client.
 	    		receiveSocket.receive(receivePacket);
 	    	} catch(IOException e) {
+	    		if(e.getMessage().equals("socket closed")){
+	    			System.exit(0);
+	    		}
 	    		e.printStackTrace();
-	    		System.exit(1);
+    			System.exit(1);
 	    	}
 	    
 	    	//Keep the client address and port number for the response later
@@ -73,8 +76,11 @@ class Listener implements Runnable {
 	    	try { //Send the packet to the server
 	    		sendReceiveSocket.send(sendPacket);
 	    	} catch (IOException e) {
+	    		if(e.getMessage().equals("socket closed")){
+	    			System.exit(0);
+	    		}
 	    		e.printStackTrace();
-	    		System.exit(1);
+    			System.exit(1);
 	    	}
 	    
 	    	if(verbose) {
@@ -84,8 +90,11 @@ class Listener implements Runnable {
 	    	try { //Wait for a packet to come in from the Server
 	    		sendReceiveSocket.receive(receivePacket);
 	    	} catch(IOException e) {
+	    		if(e.getMessage().equals("socket closed")){
+	    			System.exit(0);
+	    		}
 	    		e.printStackTrace();
-	    		System.exit(1);
+    			System.exit(1);
 	    	}
 	    
 	    	sendPacket = new DatagramPacket(data, receivePacket.getLength(), clientAddress, clientPort);
@@ -97,16 +106,20 @@ class Listener implements Runnable {
 	    	try { //Send the packet to the client
 	    		sendReceiveSocket.send(sendPacket);
 	    	} catch (IOException e) {
+	    		if(e.getMessage().equals("socket closed")){
+	    			System.exit(0);
+	    		}
 	    		e.printStackTrace();
-	    		System.exit(1);
+    			System.exit(1);
 	    	}
 	    }
-	    
-	    System.out.println("Listener thread stopping");
-	    sendReceiveSocket.close();
+	}
+	
+	public void kill()
+	{
+		sendReceiveSocket.close();
 	    receiveSocket.close();
-	    return;
-	}	
+	}
 }
 
 public class ErrorSim {
@@ -123,8 +136,9 @@ public class ErrorSim {
 			System.exit(1);
 		}
 		
-		Thread listener = new Thread(new Listener(23, localHost, 69, true));
-		listener.start();
+		Listener listener = new Listener(23, localHost, 69, true);
+		Thread listenerThread = new Thread(listener);
+		listenerThread.start();
 		
 		Scanner in = new Scanner(System.in);
 		String command;
@@ -141,10 +155,12 @@ public class ErrorSim {
 					System.out.println("Error: Too many parameters.");
 				}
 				else {
-					listener.interrupt();
-					System.out.println("Waiting for listener to stop...");
-					while(listener.isAlive()) {}
-					System.out.println("Shutting down.");
+					listener.kill();
+					try {
+						listenerThread.join();
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
 					System.exit(0);
 				}
 			}
