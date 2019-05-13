@@ -5,6 +5,7 @@ import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Scanner;
+import org.apache.commons.cli.*;
 
 class Listener implements Runnable {
 	private DatagramSocket sendReceiveSocket, receiveSocket;
@@ -126,17 +127,77 @@ public class ErrorSim {
 
 	public static void main(String[] args) {
 		
-		System.out.println("Error Simulator Running"); 
-		
-		InetAddress localHost = null;
+		Boolean verbose = false;
+		int serverPort = 69;
+		int clientPort = 23;
+		InetAddress serverAddress = null;
 		try {
-			localHost = InetAddress.getLocalHost();
+			serverAddress = InetAddress.getLocalHost();
 		} catch (UnknownHostException e) {
 			e.printStackTrace();
 			System.exit(1);
 		}
 		
-		Listener listener = new Listener(23, localHost, 69, true);
+		Option verboseOption = new Option( "v", "verbose", false, "print extra debug info" );
+		
+		Option serverPortOption = Option.builder("sp").argName("server port")
+                .hasArg()
+                .desc("the port number of the servers listener")
+                .type(Integer.TYPE)
+                .build();
+		
+		Option serverAddressOption = Option.builder("sa").argName("server address")
+                .hasArg()
+                .desc("the IP address of the server")
+                .type(String.class)
+                .build();
+		
+		Option clientPortOption = Option.builder("cp").argName("client port")
+                .hasArg()
+                .desc("the port number to listen to client requests on")
+                .type(Integer.TYPE)
+                .build();
+		
+		Options options = new Options();
+
+		options.addOption(verboseOption);
+		options.addOption(serverPortOption);
+		options.addOption(serverAddressOption);
+		options.addOption(clientPortOption);
+		
+		CommandLineParser parser = new DefaultParser();
+	    try {
+	        // parse the command line arguments
+	        CommandLine line = parser.parse( options, args );
+	        
+	        if( line.hasOption("verbose")) {
+		        verbose = true;
+		    }
+	        
+	        if( line.hasOption("sp")) {
+		        serverPort = Integer.parseInt(line.getOptionValue("sp"));
+		    }
+	        
+	        if( line.hasOption("sa")) {
+		        try {
+					serverAddress = InetAddress.getByName((String)line.getParsedOptionValue("sa"));
+				} catch (UnknownHostException e) {
+					e.printStackTrace();
+				}
+		    }
+	        
+	        if( line.hasOption("cp")) {
+	        	clientPort = Integer.parseInt(line.getOptionValue("cp"));
+		    } 
+	    }
+	    catch( ParseException exp ) {
+	        System.err.println( "Command line argument parsing failed.  Reason: " + exp.getMessage() );
+	        System.exit(1);
+	    }
+		
+		System.out.println("Error Simulator Running"); 
+		
+		Listener listener = new Listener(clientPort, serverAddress, serverPort, verbose);
 		Thread listenerThread = new Thread(listener);
 		listenerThread.start();
 		
