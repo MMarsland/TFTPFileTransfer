@@ -32,15 +32,15 @@ public abstract class TFTPPacket {
 	{
 		if (bytes.length < 4) {
 			throw new IllegalArgumentException("Packet is not long enough.");
-		} else if (bytes[0] == 0 && bytes[1] == 1) {
+		} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) == 1) {
 			return new TFTPPacket.RRQ(bytes);
-		} else if (bytes[0] == 0 && bytes[1] == 2) {
+		} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) == 2) {
 			return new TFTPPacket.WRQ(bytes);
-		} else if (bytes[0] == 0 && bytes[1] == 3) {
+		} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) == 3) {
 			return new TFTPPacket.DATA(bytes);
-		} else if (bytes[0] == 0 && bytes[1] == 4) {
+		} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) == 4) {
 			return new TFTPPacket.ACK(bytes);
-		} else if (bytes[0] == 0 && bytes[1] == 5) {
+		} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) == 5) {
 			return new TFTPPacket.ERROR(bytes);
 		} else {
 			throw new IllegalArgumentException(String.format("Unkown Opcode."));
@@ -327,7 +327,7 @@ public abstract class TFTPPacket {
 		
 		public DATA (int blockNum, byte[] data)
 		{
-			this.blockNum = blockNum;
+			this.blockNum = blockNum & 0xFFFF;
 			this.data = data;
 		}
 		
@@ -398,7 +398,7 @@ public abstract class TFTPPacket {
 		
 		public ACK (int blockNum)
 		{
-			this.blockNum = blockNum;
+			this.blockNum = blockNum & 0xFFFF;
 		}
 		
 		public ACK (byte[] bytes)
