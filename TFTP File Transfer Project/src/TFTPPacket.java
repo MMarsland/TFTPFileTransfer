@@ -10,8 +10,25 @@ public abstract class TFTPPacket {
 	 */
 	public abstract byte[] toBytes();
 	
+	/**
+	 * Get a string representation of a packet.
+	 */
+	public abstract String toString();
 	
-	public static TFTPPacket parse (byte[] bytes) throws IllegalArgumentException
+	
+	/**
+	 * Get a packet object from an array of bytes.
+	 * 
+	 * @note The array passed to this function should contain only the packet,
+	 * 	     any trailing bytes should be removed before passing the array to
+	 *       this function
+	 * 
+	 * @param bytes The bytes from which a packet should be parsed
+	 * @return The packet parsed from the provided bytes
+	 * @throws IllegalArgumentException
+	 */
+	public static TFTPPacket parse (byte[] bytes)
+			throws IllegalArgumentException
 	{
 		if (bytes.length < 4) {
 			throw new IllegalArgumentException("Packet is not long enough.");
@@ -192,6 +209,13 @@ public abstract class TFTPPacket {
 			
 			return data;
 		}
+
+		@Override
+		public String toString()
+		{
+			return String.format("Read Request <filename: \"%s\", mode: %s>",
+					this.filename, this.mode.toString());
+		}
 		
 	}
 	
@@ -281,6 +305,13 @@ public abstract class TFTPPacket {
 			
 			return data;
 		}
+		
+		@Override
+		public String toString()
+		{
+			return String.format("Write Request <filename: \"%s\", mode: %s>",
+					this.filename, this.mode.toString());
+		}
 	}
 	
 	public static class DATA extends TFTPPacket {
@@ -346,6 +377,13 @@ public abstract class TFTPPacket {
 			
 			return data;
 		}
+		
+		@Override
+		public String toString()
+		{
+			return String.format("Data <block number: %d, num bytes: %d>",
+					this.blockNum, this.data.length);
+		}
 	}
 	
 	public static class ACK extends TFTPPacket {
@@ -397,6 +435,13 @@ public abstract class TFTPPacket {
 			data[3] = (byte) ((this.blockNum >> 8) & 0xFF);
 			
 			return data;
+		}
+		
+		@Override
+		public String toString()
+		{
+			return String.format("Acknowledgment <block number: %d>",
+					this.blockNum);
 		}
 	}
 	
@@ -471,6 +516,13 @@ public abstract class TFTPPacket {
 			data[data.length - 1] = 0;
 			
 			return data;
+		}
+		
+		@Override
+		public String toString()
+		{
+			return String.format("Error <code: %d, description: \"%s\">",
+					this.error.code, this.description);
 		}
 	}
 }
