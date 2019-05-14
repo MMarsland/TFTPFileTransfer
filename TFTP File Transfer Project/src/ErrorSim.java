@@ -42,12 +42,22 @@ class Listener implements Runnable {
 	    }
 	}
 	
+	private boolean isRequestRW(DatagramPacket packet) {
+		byte[] packetData = new byte[packet.getLength()];
+    	System.arraycopy(packet.getData(), 0, packetData, 0, packet.getLength());
+    	TFTPPacket parsedPacket = TFTPPacket.parse(packetData);
+    	
+    	return (parsedPacket instanceof TFTPPacket.WRQ || parsedPacket instanceof TFTPPacket.WRQ);
+	}
+	
 	public void run(){
 		byte data[] = new byte[516];
 	    DatagramPacket receivePacket = new DatagramPacket(data, data.length);
 	    DatagramPacket sendPacket;
 	    InetAddress clientAddress;
-	    int clientPort;
+	    int clientTID;
+	    int serverTID = serverPort;
+	    DatagramSocket clientSocket = receiveSocket;
 	    
 	    while(!Thread.interrupted()) {
 	    	if(verbose) {
@@ -55,7 +65,7 @@ class Listener implements Runnable {
 	    	}
 	    
 	    	try { //Wait for a packet to come in from the client.
-	    		receiveSocket.receive(receivePacket);
+	    		clientSocket.receive(receivePacket);
 	    	} catch(IOException e) {
 	    		if(e.getMessage().equals("socket closed")){
 	    			System.exit(0);
@@ -66,14 +76,27 @@ class Listener implements Runnable {
 	    
 	    	//Keep the client address and port number for the response later
 	    	clientAddress = receivePacket.getAddress();
-	    	clientPort = receivePacket.getPort();
-	    
-	    	sendPacket = new DatagramPacket(data, receivePacket.getLength(), serverAddress, serverPort);
+	    	clientTID = receivePacket.getPort();
 	    
 	    	if(verbose) {
 	    		System.out.println("Forwarding data to server...");
 	    	}
-	    
+	    	
+	    	if(isRequestRW(receivePacket)){
+	    		//This is the start of communication, use the servers known port
+	    		sendPacket = new DatagramPacket(data, receivePacket.getLength(), serverAddress, serverPort);
+	    		clientSocket = sendReceiveSocket; //listening to client on different port now that transaction has started
+	    	}
+	    	else{
+	    		//Not the start of communication, use the port number for the server thread that handles this transaction
+	    		sendPacket = new DatagramPacket(data, receivePacket.getLength(), serverAddress, serverTID);
+	    		
+	    		if(receivePacket.getLength() < 516) {
+	    			//This packet is the end of a transaction, go back to listening to client on known port
+	    			clientSocket = receiveSocket;
+	    		}
+	    	}
+	    	
 	    	try { //Send the packet to the server
 	    		sendReceiveSocket.send(sendPacket);
 	    	} catch (IOException e) {
@@ -97,8 +120,11 @@ class Listener implements Runnable {
 	    		e.printStackTrace();
     			System.exit(1);
 	    	}
+	    	
+	    	//This is the port number for the servers transaction handling thread
+	    	serverTID = receivePacket.getPort();
 	    
-	    	sendPacket = new DatagramPacket(data, receivePacket.getLength(), clientAddress, clientPort);
+	    	sendPacket = new DatagramPacket(data, receivePacket.getLength(), clientAddress, clientTID);
 	    
 	    	if(verbose) {
 	    		System.out.println("Forwarding data to client...");
