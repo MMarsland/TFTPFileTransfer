@@ -32,15 +32,15 @@ public abstract class TFTPPacket {
 	{
 		if (bytes.length < 4) {
 			throw new IllegalArgumentException("Packet is not long enough.");
-		} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) == 1) {
+		} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) == 1) {
 			return new TFTPPacket.RRQ(bytes);
-		} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) == 2) {
+		} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) == 2) {
 			return new TFTPPacket.WRQ(bytes);
-		} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) == 3) {
+		} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) == 3) {
 			return new TFTPPacket.DATA(bytes);
-		} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) == 4) {
+		} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) == 4) {
 			return new TFTPPacket.ACK(bytes);
-		} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) == 5) {
+		} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) == 5) {
 			return new TFTPPacket.ERROR(bytes);
 		} else {
 			throw new IllegalArgumentException(String.format("Unkown Opcode."));
@@ -153,7 +153,7 @@ public abstract class TFTPPacket {
 		{
 			if (bytes.length < 4) {
 				throw new IllegalArgumentException("Read request is too short");
-			} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) != 1) {
+			} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) != 1) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for read request");
 			}
@@ -253,7 +253,7 @@ public abstract class TFTPPacket {
 			if (bytes.length < 4) {
 				throw new IllegalArgumentException(
 						"Write request is too short");
-			} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) != 2) {
+			} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) != 2) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for write request");
 			}
@@ -360,7 +360,7 @@ public abstract class TFTPPacket {
 		{
 			if (bytes.length < 4) {
 				throw new IllegalArgumentException("Data packet is too short");
-			} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) != 3) {
+			} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) != 3) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for data packet");
 			}
@@ -436,7 +436,7 @@ public abstract class TFTPPacket {
 			if (bytes.length != 4) {
 				throw new IllegalArgumentException(
 						"Invalid length for ACK packet");
-			} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) != 4) {
+			} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) != 4) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for ACK packet");
 			}
@@ -501,7 +501,7 @@ public abstract class TFTPPacket {
 		{
 			if (bytes.length < 5) {
 				throw new IllegalArgumentException("Error packet is too short");
-			} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) != 5) {
+			} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) != 5) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for error packet");
 			}
