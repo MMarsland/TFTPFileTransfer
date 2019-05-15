@@ -6,7 +6,17 @@ public abstract class TFTPPacket {
 	/**
 	 * Maximum size for received a TFTP packet
 	 */
-	public static final int MAX_SIZE = 516;
+	public static final int BLOCK_SIZE = 512;
+	
+	/**
+	 * Maximum size for received a TFTP packet
+	 */
+	public static final int MAX_SIZE = BLOCK_SIZE + 4;
+	
+	/**
+	 * Maximum size for received a TFTP packet
+	 */
+	public static final int MAX_BLOCK_NUM = 0xFFFF;
 	
 	
 	/**
@@ -355,10 +365,16 @@ public abstract class TFTPPacket {
 		 * Payload of data packet
 		 */
 		private byte[] data;
-		
-		public DATA (int blockNum, byte[] data)
+	
+		public DATA (int blockNum, byte[] data) throws IllegalArgumentException
 		{
-			this.blockNum = blockNum & 0xFFFF;
+			if (blockNum > TFTPPacket.MAX_BLOCK_NUM) {
+				throw new IllegalArgumentException("Block number is too high.");
+			} else if (data.length > TFTPPacket.BLOCK_SIZE) {
+				throw new IllegalArgumentException("Data block is too large.");
+			}
+			
+			this.blockNum = blockNum;
 			this.data = data;
 		}
 		
@@ -432,8 +448,12 @@ public abstract class TFTPPacket {
 		 */
 		private int blockNum;
 		
-		public ACK (int blockNum)
+		public ACK (int blockNum) throws IllegalArgumentException
 		{
+			if (blockNum > TFTPPacket.MAX_BLOCK_NUM) {
+				throw new IllegalArgumentException("Block number is too high.");
+			}
+			
 			this.blockNum = blockNum & 0xFFFF;
 		}
 		
