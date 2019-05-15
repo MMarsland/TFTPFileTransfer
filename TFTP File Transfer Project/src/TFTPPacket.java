@@ -381,6 +381,8 @@ public abstract class TFTPPacket {
 		public byte[] getData() {
 			return data;
 		}
+		
+		/* Method for getting the length of the data packet when creating a datagramPacket? or a method to create a datagramPacket -MM0515*/
 
 		/**
 		 * Marshal the packet to the format to be transmitted on a network.
