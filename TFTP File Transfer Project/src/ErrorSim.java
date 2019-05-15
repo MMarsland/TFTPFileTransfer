@@ -47,6 +47,7 @@ class Listener implements Runnable {
     	System.arraycopy(packet.getData(), 0, packetData, 0, packet.getLength());
     	TFTPPacket parsedPacket = TFTPPacket.parse(packetData);
     	
+    	//Shouldn't one of these instanceof checks be for TFTPPacket.RRQ? -Scott
     	return (parsedPacket instanceof TFTPPacket.WRQ || parsedPacket instanceof TFTPPacket.WRQ); /* Is this a typo? -MM0515*/
 	}
 	
