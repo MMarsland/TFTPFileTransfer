@@ -51,6 +51,12 @@ public abstract class TFTPPacket {
 	public static enum TFTPMode {
 		NETASCII, OCTET, MAIL;
 		
+		/**
+		 * Parse a TFTPMode from a string
+		 * @param str The string from which the TFTPMode should be parsed
+		 * @return The TFTPMode which corresponds with the string
+		 * @throws IllegalArgumentException
+		 */
 		public static TFTPMode parseFromString (String str) throws
 								IllegalArgumentException
 		{
@@ -61,7 +67,8 @@ public abstract class TFTPPacket {
 			} else if (str.equalsIgnoreCase("MAIL")) {
 				return TFTPMode.MAIL;
 			} else {
-				throw new IllegalArgumentException("Unkown mode \"" + str + "\"");
+				throw new IllegalArgumentException("Unkown mode \"" + str +
+						"\"");
 			}
 		}
 		
@@ -127,7 +134,13 @@ public abstract class TFTPPacket {
          *  ------------------------------------------------ 
 		 */
 		
+		/**
+		 * Name of file to be read
+		 */
 		private String filename;
+		/**
+		 * Transfer mode
+		 */
 		private TFTPMode mode;
 		
 		public RRQ (String filename, TFTPMode mode)
@@ -220,7 +233,13 @@ public abstract class TFTPPacket {
 	}
 	
 	public static class WRQ extends TFTPPacket {
+		/**
+		 * Name of file to be written
+		 */
 		private String filename;
+		/**
+		 * Transfer mode
+		 */
 		private TFTPMode mode;
 		
 		public WRQ (String filename, TFTPMode mode)
@@ -322,7 +341,13 @@ public abstract class TFTPPacket {
          *  ----------------------------------
 		 */
 		
+		/**
+		 * Block number for this data packet
+		 */
 		private int blockNum;
+		/**
+		 * Payload of data packet
+		 */
 		private byte[] data;
 		
 		public DATA (int blockNum, byte[] data)
@@ -394,6 +419,9 @@ public abstract class TFTPPacket {
          *  ---------------------
 		 */
 		
+		/**
+		 * Block number for this ack
+		 */
 		private int blockNum;
 		
 		public ACK (int blockNum)
@@ -452,7 +480,13 @@ public abstract class TFTPPacket {
          *  -----------------------------------------
 		 */
 		
+		/**
+		 * Error type
+		 */
 		private TFTPError error;
+		/**
+		 * Error description
+		 */
 		private String description;
 		
 		public ERROR  (TFTPError error, String description)
