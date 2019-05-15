@@ -1,3 +1,5 @@
+import java.io.BufferedReader;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
@@ -139,14 +141,12 @@ class ReadHandler extends RequestHandler implements Runnable {
 		}
 		// Inspect read request
 		
-		
-		byte[] data = new byte[512];
 		TFTPPacket.DATA dataPacket;
 	    DatagramPacket sendPacket;
 		
-		FileReader fr = null;
+		FileInputStream fis = null;
 		try {
-			fr = new FileReader(this.filename);
+			fis = new FileInputStream(this.filename);
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();
 			System.exit(0);
@@ -157,31 +157,27 @@ class ReadHandler extends RequestHandler implements Runnable {
 		boolean moreToRead = true;
 		while (moreToRead) {
 			// READ DATA FROM FILE into data bytes{
-		    
-		    int i; 
-		    int count = 0;
+			byte[] data = new byte[512];
+		    int len = 69999; 
 		    this.blockNum++;
 		    this.blockNum = this.blockNum % (2^16);
 		    if(this.verbose) {
 				System.out.println("Reading Block Number #"+blockNum);
 			}
 		    try {
-				while (count < 512) {
-					if ((i=fr.read()) != -1) {
-						data[count] = (byte) i; // Not sure about new lines and carriage returns..
-						count++;
-					}
-					else {
-						moreToRead = false;
-						fr.close();
-						break;
-					}
-				}
-				
+		    	if ((len=fis.read(data,0,512)) < 512) {
+		    		moreToRead = false;
+					fis.close();
+		    	}
+		    	// Shrink wrap size based on len
+		    	data = Arrays.copyOf(data, len);
 			} catch (IOException e) {
 				e.printStackTrace();
 				System.exit(0);
-			} 
+			}
+		    if(this.verbose) {
+				System.out.println("Block #"+blockNum+"has "+len+" data data bytes!");
+			}
 			// Assemble data packet
 		    dataPacket = new TFTPPacket.DATA(this.blockNum, data);
 		    sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, clientAddress, clientTID);
