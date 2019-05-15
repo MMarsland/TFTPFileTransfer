@@ -4,6 +4,12 @@ import java.util.Arrays;
 public abstract class TFTPPacket {
 	
 	/**
+	 * Maximum size for received a TFTP packet
+	 */
+	public static final int MAX_SIZE = 516;
+	
+	
+	/**
 	 * Marshal the packet to the format to be transmitted on a network.
 	 * 
 	 * @return A byte array containing the marshaled packet
@@ -397,8 +403,8 @@ public abstract class TFTPPacket {
 			data[0] = 0;
 			data[1] = 3;
 			
-			data[2] = (byte) (this.blockNum & 0xFF);
-			data[3] = (byte) ((this.blockNum >> 8) & 0xFF);
+			data[2] = (byte) ((this.blockNum >> 8) & 0xFF);
+			data[3] = (byte) (this.blockNum & 0xFF);
 
 			System.arraycopy(this.data, 0, data, 4, this.data.length);
 			
@@ -461,8 +467,8 @@ public abstract class TFTPPacket {
 			data[0] = 0;
 			data[1] = 4;
 			
-			data[2] = (byte) (this.blockNum & 0xFF);
-			data[3] = (byte) ((this.blockNum >> 8) & 0xFF);
+			data[2] = (byte) ((this.blockNum >> 8) & 0xFF);
+			data[3] = (byte) (this.blockNum & 0xFF);
 			
 			return data;
 		}
@@ -543,8 +549,8 @@ public abstract class TFTPPacket {
 			data[0] = 0;
 			data[1] = 5;
 			
-			data[2] = (byte) (this.error.code & 0xFF);
-			data[3] = (byte) ((this.error.code >> 8) & 0xFF);
+			data[2] = (byte) ((this.error.code >> 8) & 0xFF);
+			data[3] = (byte) (this.error.code & 0xFF);
 			
 			byte descBytes[] = this.description.getBytes(
 					StandardCharsets.UTF_8);
