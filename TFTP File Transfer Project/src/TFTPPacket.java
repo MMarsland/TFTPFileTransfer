@@ -365,7 +365,7 @@ public abstract class TFTPPacket {
 						"Incorrect opcode for data packet");
 			}
 			
-			this.blockNum = ((int)bytes[2]) | (((int)bytes[3]) << 8);
+			this.blockNum = ((int)bytes[3]) | (((int)bytes[2]) << 8);
 			
 			if (bytes.length > 4) {
 				this.data = Arrays.copyOfRange(bytes, 4, bytes.length - 1);
@@ -441,7 +441,7 @@ public abstract class TFTPPacket {
 						"Incorrect opcode for ACK packet");
 			}
 			
-			this.blockNum = ((int)bytes[2]) | (((int)bytes[3]) << 8);
+			this.blockNum = ((int)bytes[3]) | (((int)bytes[2]) << 8);
 		}
 
 		public int getBlockNum() {
@@ -506,7 +506,7 @@ public abstract class TFTPPacket {
 						"Incorrect opcode for error packet");
 			}
 			
-			int code = ((int)bytes[2]) | (((int)bytes[3]) << 8);
+			int code = ((int)bytes[3]) | (((int)bytes[2]) << 8);
 			this.error = TFTPError.fromCode(code);
 
 			// Find end of string
