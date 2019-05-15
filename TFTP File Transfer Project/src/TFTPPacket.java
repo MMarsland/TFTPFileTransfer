@@ -32,15 +32,15 @@ public abstract class TFTPPacket {
 	{
 		if (bytes.length < 4) {
 			throw new IllegalArgumentException("Packet is not long enough.");
-		} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) == 1) {
+		} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) == 1) {
 			return new TFTPPacket.RRQ(bytes);
-		} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) == 2) {
+		} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) == 2) {
 			return new TFTPPacket.WRQ(bytes);
-		} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) == 3) {
+		} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) == 3) {
 			return new TFTPPacket.DATA(bytes);
-		} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) == 4) {
+		} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) == 4) {
 			return new TFTPPacket.ACK(bytes);
-		} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) == 5) {
+		} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) == 5) {
 			return new TFTPPacket.ERROR(bytes);
 		} else {
 			throw new IllegalArgumentException(String.format("Unkown Opcode."));
@@ -51,6 +51,12 @@ public abstract class TFTPPacket {
 	public static enum TFTPMode {
 		NETASCII, OCTET, MAIL;
 		
+		/**
+		 * Parse a TFTPMode from a string
+		 * @param str The string from which the TFTPMode should be parsed
+		 * @return The TFTPMode which corresponds with the string
+		 * @throws IllegalArgumentException
+		 */
 		public static TFTPMode parseFromString (String str) throws
 								IllegalArgumentException
 		{
@@ -61,7 +67,8 @@ public abstract class TFTPPacket {
 			} else if (str.equalsIgnoreCase("MAIL")) {
 				return TFTPMode.MAIL;
 			} else {
-				throw new IllegalArgumentException("Unkown mode \"" + str + "\"");
+				throw new IllegalArgumentException("Unkown mode \"" + str +
+						"\"");
 			}
 		}
 		
@@ -127,7 +134,13 @@ public abstract class TFTPPacket {
          *  ------------------------------------------------ 
 		 */
 		
+		/**
+		 * Name of file to be read
+		 */
 		private String filename;
+		/**
+		 * Transfer mode
+		 */
 		private TFTPMode mode;
 		
 		public RRQ (String filename, TFTPMode mode)
@@ -140,7 +153,7 @@ public abstract class TFTPPacket {
 		{
 			if (bytes.length < 4) {
 				throw new IllegalArgumentException("Read request is too short");
-			} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) != 1) {
+			} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) != 1) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for read request");
 			}
@@ -220,7 +233,13 @@ public abstract class TFTPPacket {
 	}
 	
 	public static class WRQ extends TFTPPacket {
+		/**
+		 * Name of file to be written
+		 */
 		private String filename;
+		/**
+		 * Transfer mode
+		 */
 		private TFTPMode mode;
 		
 		public WRQ (String filename, TFTPMode mode)
@@ -234,7 +253,7 @@ public abstract class TFTPPacket {
 			if (bytes.length < 4) {
 				throw new IllegalArgumentException(
 						"Write request is too short");
-			} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) != 2) {
+			} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) != 2) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for write request");
 			}
@@ -322,7 +341,13 @@ public abstract class TFTPPacket {
          *  ----------------------------------
 		 */
 		
+		/**
+		 * Block number for this data packet
+		 */
 		private int blockNum;
+		/**
+		 * Payload of data packet
+		 */
 		private byte[] data;
 		
 		public DATA (int blockNum, byte[] data)
@@ -335,12 +360,12 @@ public abstract class TFTPPacket {
 		{
 			if (bytes.length < 4) {
 				throw new IllegalArgumentException("Data packet is too short");
-			} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) != 3) {
+			} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) != 3) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for data packet");
 			}
 			
-			this.blockNum = ((int)bytes[2]) | (((int)bytes[3]) << 8);
+			this.blockNum = ((int)bytes[3]) | (((int)bytes[2]) << 8);
 			
 			if (bytes.length > 4) {
 				this.data = Arrays.copyOfRange(bytes, 4, bytes.length - 1);
@@ -396,6 +421,9 @@ public abstract class TFTPPacket {
          *  ---------------------
 		 */
 		
+		/**
+		 * Block number for this ack
+		 */
 		private int blockNum;
 		
 		public ACK (int blockNum)
@@ -408,12 +436,12 @@ public abstract class TFTPPacket {
 			if (bytes.length != 4) {
 				throw new IllegalArgumentException(
 						"Invalid length for ACK packet");
-			} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) != 4) {
+			} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) != 4) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for ACK packet");
 			}
 			
-			this.blockNum = ((int)bytes[2]) | (((int)bytes[3]) << 8);
+			this.blockNum = ((int)bytes[3]) | (((int)bytes[2]) << 8);
 		}
 
 		public int getBlockNum() {
@@ -454,7 +482,13 @@ public abstract class TFTPPacket {
          *  -----------------------------------------
 		 */
 		
+		/**
+		 * Error type
+		 */
 		private TFTPError error;
+		/**
+		 * Error description
+		 */
 		private String description;
 		
 		public ERROR  (TFTPError error, String description)
@@ -467,12 +501,12 @@ public abstract class TFTPPacket {
 		{
 			if (bytes.length < 5) {
 				throw new IllegalArgumentException("Error packet is too short");
-			} else if ((((int)bytes[0]) | (((int)bytes[1]) << 8)) != 5) {
+			} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) != 5) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for error packet");
 			}
 			
-			int code = ((int)bytes[2]) | (((int)bytes[3]) << 8);
+			int code = ((int)bytes[3]) | (((int)bytes[2]) << 8);
 			this.error = TFTPError.fromCode(code);
 
 			// Find end of string
