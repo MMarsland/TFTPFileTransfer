@@ -536,7 +536,7 @@ public abstract class TFTPPacket {
 			this.error = TFTPError.fromCode(code);
 
 			// Find end of string
-			int end = 2;
+			int end = 4;
 			for (; (end < bytes.length) && (bytes[end] != 0); end++) {}
 
 			if (end == bytes.length) {
