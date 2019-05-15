@@ -160,7 +160,7 @@ class ReadHandler extends RequestHandler implements Runnable {
 			byte[] data = new byte[512];
 		    int len = 69999; 
 		    this.blockNum++;
-		    this.blockNum = this.blockNum % (2^16);
+		    this.blockNum = this.blockNum & 0xFFFF;
 		    if(this.verbose) {
 				System.out.println("Reading Block Number #"+blockNum);
 			}
