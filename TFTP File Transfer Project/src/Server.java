@@ -32,7 +32,7 @@ class ServerListener implements Runnable {
 	}
 	
 	public void run(){
-		byte data[] = new byte[516];
+		byte data[] = new byte[TFTPPacket.MAX_SIZE];
 	    DatagramPacket receivePacket = new DatagramPacket(data, data.length);
 	    DatagramPacket sendPacket;
 	    InetAddress clientAddress;
@@ -110,7 +110,7 @@ abstract class RequestHandler implements Runnable {
 class ReadHandler extends RequestHandler implements Runnable {
 
 	protected TFTPPacket.RRQ request;
-	protected int blockNum = 1;
+	protected int blockNum = 0;
 	
 	public ReadHandler(DatagramPacket receivePacket, TFTPPacket request, boolean verbose) {
 		if(verbose) {
@@ -202,16 +202,21 @@ class ReadHandler extends RequestHandler implements Runnable {
 		    if(this.verbose) {
 				System.out.println("Waiting for ack packet");
 			}
+		    data = new byte[TFTPPacket.MAX_SIZE];
+		    DatagramPacket ackPacket = new DatagramPacket(data, data.length);
 		    try {
-	    		sendReceiveSocket.receive(receivePacket);
+	    		sendReceiveSocket.receive(ackPacket);
 	    	} catch(IOException e) {
 	    		e.printStackTrace();
     			System.exit(1);
 	    	}
+		    if(this.verbose) {
+				System.out.println("Recieved packet from client");
+			}
 		    // Parse ACK for correctness
 		    TFTPPacket response = null;
 	    	try {
-				response = TFTPPacket.parse(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
+				response = TFTPPacket.parse(Arrays.copyOf(ackPacket.getData(), ackPacket.getLength()));
 			} catch (IllegalArgumentException e) {
 				e.printStackTrace();
 				System.exit(0);
