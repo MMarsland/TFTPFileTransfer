@@ -176,7 +176,7 @@ class ReadHandler extends RequestHandler implements Runnable {
 				System.exit(0);
 			}
 		    if(this.verbose) {
-				System.out.println("Block #"+blockNum+"has "+len+" data data bytes!");
+				System.out.println("Block #"+blockNum+" has "+len+" data bytes!");
 			}
 			// Assemble data packet
 		    dataPacket = new TFTPPacket.DATA(this.blockNum, data);
