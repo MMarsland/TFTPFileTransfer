@@ -405,7 +405,7 @@ public abstract class TFTPPacket {
 			this.blockNum = ((int)bytes[3]) | (((int)bytes[2]) << 8);
 			
 			if (bytes.length > 4) {
-				this.data = Arrays.copyOfRange(bytes, 3, bytes.length - 1);
+				this.data = Arrays.copyOfRange(bytes, 4, bytes.length);
 			} else {
 				this.data = new byte[] {};
 			}
