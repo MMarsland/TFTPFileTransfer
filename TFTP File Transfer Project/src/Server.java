@@ -1,6 +1,7 @@
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -139,8 +140,6 @@ class ReadHandler extends RequestHandler implements Runnable {
 		if(this.verbose) {
 			System.out.println("Handling Read Request");
 		}
-		// Inspect read request
-		
 		TFTPPacket.DATA dataPacket;
 	    DatagramPacket sendPacket;
 		
@@ -152,11 +151,12 @@ class ReadHandler extends RequestHandler implements Runnable {
 			System.exit(0);
 		} 
 		if(this.verbose) {
-			System.out.println("File Successfully Opened");
+			System.out.println("File Successfully Opened! filename: "+this.filename);
 		}
+		
 		boolean moreToRead = true;
 		while (moreToRead) {
-			// READ DATA FROM FILE into data bytes{
+			// Read data from file into data packet
 			byte[] data = new byte[512];
 		    int len = 69999; 
 		    this.blockNum++;
@@ -175,19 +175,24 @@ class ReadHandler extends RequestHandler implements Runnable {
 				e.printStackTrace();
 				System.exit(0);
 			}
+		    
 		    if(this.verbose) {
-				System.out.println("Block #"+blockNum+"has "+len+" data data bytes!");
+				System.out.println("Block #"+blockNum+" has "+len+" data bytes!");
 			}
+		    
 			// Assemble data packet
 		    dataPacket = new TFTPPacket.DATA(this.blockNum, data);
 		    sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, clientAddress, clientTID);
+		    
 		    if(this.verbose) {
 				System.out.println("Data Packet Successfully Assembled");
 			}
+		    
 		    // Send data packet to client on Client TID
 		    if(this.verbose) {
 				System.out.println("Sending Data Packet");
 			}
+		    
 		    try {
 	    		sendReceiveSocket.send(sendPacket);
 	    	} catch (IOException e) {
@@ -198,6 +203,7 @@ class ReadHandler extends RequestHandler implements Runnable {
 		    if(this.verbose) {
 				System.out.println("Waiting for ack packet");
 			}
+		    
 		    data = new byte[TFTPPacket.MAX_SIZE];
 		    DatagramPacket ackPacket = new DatagramPacket(data, data.length);
 		    try {
@@ -206,46 +212,44 @@ class ReadHandler extends RequestHandler implements Runnable {
 	    		e.printStackTrace();
     			System.exit(1);
 	    	}
+		    
 		    if(this.verbose) {
 				System.out.println("Recieved packet from client");
 			}
+		    
 		    // Parse ACK for correctness
-		    TFTPPacket response = null;
+		    TFTPPacket.ACK response = null;
 	    	try {
-				response = TFTPPacket.parse(Arrays.copyOf(ackPacket.getData(), ackPacket.getLength()));
+				response = new TFTPPacket.ACK(Arrays.copyOf(ackPacket.getData(), ackPacket.getLength()));
 			} catch (IllegalArgumentException e) {
+				System.out.println("Not a ack response to data! :((((");
 				e.printStackTrace();
 				System.exit(0);
 			}
-	    	// Create a handler thread
-			if (response instanceof TFTPPacket.ACK) {
-				// Check for matching block number
-				if (((TFTPPacket.ACK) response).getBlockNum() == this.blockNum ) {
-					// Correct ack
-					if(this.verbose) {
-						System.out.println("Recieved ack for block #"+((TFTPPacket.ACK) response).getBlockNum());
-					}
-				} else {
-					// Incorrect ack
-					System.out.println("Wrong ACK response. Incorrect block number");
-		    		throw new IllegalArgumentException();
+	    	if (response.getBlockNum() == this.blockNum ) {
+				// Correct acks
+				if(this.verbose) {
+					System.out.println("Recieved ack for block #"+((TFTPPacket.ACK) response).getBlockNum());
 				}
-	    	} else {
-	    		// Not and ACK type..
-	    		System.out.println("Not a ack response to data! :((((");
+			} else {
+				// Incorrect ack
+				System.out.println("Wrong ACK response. Incorrect block number");
 	    		throw new IllegalArgumentException();
-	    	}
+			}
+	    	
 			// If more data, or exactly 0 send more packets
 			// Wait for ACK
 			// ...
+			
 			if(this.verbose && moreToRead) {
-				System.out.println("Repeating data transfer");
+				System.out.println("Sending Next Data Block: ");
 			}
+			
 		}
 		// All data is sent and last ACK received,
 		// Close socket, quit
 		if(this.verbose) {
-			System.out.println("Data Transefer complete! closing socket.");
+			System.out.println("Data Transefer complete! Closing socket.");
 		}
 		sendReceiveSocket.close();
 		if (this.verbose) {
@@ -298,16 +302,95 @@ class WriteHandler extends RequestHandler implements Runnable {
 			System.exit(1);
     	}
 	    
+	    FileOutputStream fos = null;
+		try {
+			fos = new FileOutputStream(this.filename);
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+			System.exit(0);
+		} 
+		if(this.verbose) {
+			System.out.println("File ready to be written! filename: "+this.filename);
+		}
+	    
+		byte[] data = new byte[TFTPPacket.MAX_SIZE];
 	    // Receive data and send acks
 		boolean moreToWrite = true;
 		while (moreToWrite) {
 			// Receive Data Packet
+			 if(this.verbose) {
+				System.out.println("Waiting for data packet");
+			}
+		    
+		    data = new byte[TFTPPacket.MAX_SIZE];
+		    DatagramPacket receivePacket = new DatagramPacket(data, data.length);
+		    try {
+	    		sendReceiveSocket.receive(receivePacket);
+	    	} catch(IOException e) {
+	    		e.printStackTrace();
+    			System.exit(1);
+	    	}
+		    if(this.verbose) {
+				System.out.println("Recieved data packet from client");
+			}
+			// Check Packet for correctness
+		    TFTPPacket.DATA dataPacket = null;
+	    	try {
+				dataPacket = new TFTPPacket.DATA(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
+			} catch (IllegalArgumentException e) {
+				System.out.println("Not a data response to ack! :((((");
+				e.printStackTrace();
+				System.exit(0);
+			}
+	    	// Definitely data :)
 			// Strip block number
+		    int blockNum = dataPacket.getBlockNum();
 			// Check size? Less than 512 == done
-			// Write into file &
+		    int len = dataPacket.getData().length;
+		    if (len < 512) {
+		    	moreToWrite = false;
+		    }
+		    if(this.verbose) {
+				System.out.println("Data block #"+blockNum+" has "+len+" bytes!");
+			}
+			// Write into file
+		    try {
+				fos.write(dataPacket.getData());
+			} catch (IOException e) {
+				System.out.println("Failed to write data to file!");
+				e.printStackTrace();
+				System.exit(0);
+			}
+		    
+		    
 			// Send Acknowledgement packet with block number
+		    TFTPPacket.ACK ackPacket = new TFTPPacket.ACK(blockNum);
+		    sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, clientAddress, clientTID);
+		    
+		    if(this.verbose) {
+				System.out.println("Ack Packet Successfully Assembled");
+			}
+		    
+		    // Send ack packet to client on Client TID
+		    if(this.verbose) {
+				System.out.println("Sending ack Packet");
+			}
+		    
+		    try {
+	    		sendReceiveSocket.send(sendPacket);
+	    	} catch (IOException e) {
+	    		e.printStackTrace();
+    			System.exit(1);
+	    	}
+		    
+		    if(this.verbose && moreToWrite) {
+				System.out.println("Waiting for Next Data Block:");
+			}
 		}
-		// All writes performed and last ack sent
+		// All data recieved and writes performed and last ack sent
+		if(this.verbose) {
+			System.out.println("Write Request complete! Closing socket.");
+		}
 		// Close socket, quit
 		sendReceiveSocket.close();
 		if (this.verbose) {
