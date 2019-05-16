@@ -27,6 +27,13 @@ public abstract class TFTPPacket {
 	public abstract byte[] toBytes();
 	
 	/**
+	 * Get the length of a marshaled packet.
+	 * 
+	 * @return The length of the marshaled packet
+	 */
+	public abstract int size();
+	
+	/**
 	 * Get a string representation of a packet.
 	 */
 	public abstract String toString();
@@ -221,8 +228,7 @@ public abstract class TFTPPacket {
 		@Override
 		public byte[] toBytes()
 		{
-			byte data[] = new byte[filename.length() + mode.toString().length()
-			                       	+ 4];
+			byte data[] = new byte[this.size()];
 
 			data[0] = 0;
 			data[1] = 1;
@@ -244,6 +250,11 @@ public abstract class TFTPPacket {
 		{
 			return String.format("Read Request <filename: \"%s\", mode: %s>",
 					this.filename, this.mode.toString());
+		}
+
+		@Override
+		public int size() {
+			return filename.length() + mode.toString().length() + 4;
 		}
 		
 	}
@@ -321,8 +332,7 @@ public abstract class TFTPPacket {
 		@Override
 		public byte[] toBytes()
 		{
-			byte data[] = new byte[this.filename.length() + 
-			                       	this.mode.toString().length() + 4];
+			byte data[] = new byte[this.size()];
 
 			data[0] = 0;
 			data[1] = 2;
@@ -346,6 +356,11 @@ public abstract class TFTPPacket {
 		{
 			return String.format("Write Request <filename: \"%s\", mode: %s>",
 					this.filename, this.mode.toString());
+		}
+		
+		@Override
+		public int size() {
+			return this.filename.length() + this.mode.toString().length() + 4;
 		}
 	}
 	
@@ -378,7 +393,7 @@ public abstract class TFTPPacket {
 			this.data = data;
 		}
 		
-		public DATA (byte[] bytes)
+		public DATA (byte[] bytes) throws IllegalArgumentException 
 		{
 			if (bytes.length < 4) {
 				throw new IllegalArgumentException("Data packet is too short");
@@ -414,7 +429,7 @@ public abstract class TFTPPacket {
 		@Override
 		public byte[] toBytes()
 		{
-			byte data[] = new byte[this.data.length + 4];
+			byte data[] = new byte[this.size()];
 
 			data[0] = 0;
 			data[1] = 3;
@@ -432,6 +447,11 @@ public abstract class TFTPPacket {
 		{
 			return String.format("Data <block number: %d, num bytes: %d>",
 					this.blockNum, this.data.length);
+		}
+		
+		@Override
+		public int size() {
+			return this.data.length + 4;
 		}
 	}
 	
@@ -457,7 +477,7 @@ public abstract class TFTPPacket {
 			this.blockNum = blockNum & 0xFFFF;
 		}
 		
-		public ACK (byte[] bytes)
+		public ACK (byte[] bytes) throws IllegalArgumentException 
 		{
 			if (bytes.length != 4) {
 				throw new IllegalArgumentException(
@@ -482,7 +502,7 @@ public abstract class TFTPPacket {
 		@Override
 		public byte[] toBytes()
 		{
-			byte data[] = new byte[4];
+			byte data[] = new byte[this.size()];
 
 			data[0] = 0;
 			data[1] = 4;
@@ -498,6 +518,11 @@ public abstract class TFTPPacket {
 		{
 			return String.format("Acknowledgment <block number: %d>",
 					this.blockNum);
+		}
+		
+		@Override
+		public int size() {
+			return 4;
 		}
 	}
 	
@@ -523,7 +548,7 @@ public abstract class TFTPPacket {
 			this.description = description;
 		}
 		
-		public ERROR (byte[] bytes)
+		public ERROR (byte[] bytes) throws IllegalArgumentException 
 		{
 			if (bytes.length < 5) {
 				throw new IllegalArgumentException("Error packet is too short");
@@ -564,7 +589,7 @@ public abstract class TFTPPacket {
 		@Override
 		public byte[] toBytes()
 		{
-			byte data[] = new byte[this.description.length() + 4];
+			byte data[] = new byte[this.size()];
 
 			data[0] = 0;
 			data[1] = 5;
@@ -585,6 +610,11 @@ public abstract class TFTPPacket {
 		{
 			return String.format("Error <code: %d, description: \"%s\">",
 					this.error.code, this.description);
+		}
+		
+		@Override
+		public int size() {
+			return this.description.length() + 4;
 		}
 	}
 }
