@@ -7,13 +7,13 @@ import java.net.UnknownHostException;
 import java.util.Scanner;
 import org.apache.commons.cli.*;
 
-class Listener implements Runnable {
+class ErrorSimListener implements Runnable {
 	private DatagramSocket sendReceiveSocket, receiveSocket;
 	private int serverPort;
 	private InetAddress serverAddress;
 	private boolean verbose;
 	
-	public Listener(int listenerPort, InetAddress server, int serverPort, boolean verbose) {
+	public ErrorSimListener(int listenerPort, InetAddress server, int serverPort, boolean verbose) {
 		this.serverPort = serverPort;
 		this.verbose = verbose;
 		serverAddress = server;
@@ -38,7 +38,8 @@ class Listener implements Runnable {
     	System.arraycopy(packet.getData(), 0, packetData, 0, packet.getLength());
     	TFTPPacket parsedPacket = TFTPPacket.parse(packetData);
     	
-    	return (parsedPacket instanceof TFTPPacket.WRQ || parsedPacket instanceof TFTPPacket.WRQ);
+    	//Shouldn't one of these instanceof checks be for TFTPPacket.RRQ? -Scott
+    	return (parsedPacket instanceof TFTPPacket.WRQ || parsedPacket instanceof TFTPPacket.WRQ); /* Is this a typo? -MM0515*/
 	}
 	
 	public void run(){
@@ -219,7 +220,7 @@ public class ErrorSim {
 			System.out.println("Server address: " + serverAddress + " port " + serverPort);
 		}
 		
-		Listener listener = new Listener(clientPort, serverAddress, serverPort, verbose);
+		ErrorSimListener listener = new ErrorSimListener(clientPort, serverAddress, serverPort, verbose);
 		Thread listenerThread = new Thread(listener);
 		listenerThread.start();
 		
