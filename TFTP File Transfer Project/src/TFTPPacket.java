@@ -116,7 +116,7 @@ public abstract class TFTPPacket {
 		ILLEGAL_OPERATION(4), UNKOWN_TRANSFER_ID(5), FILE_ALREADY_EXISTS(6),
 		NO_SUCH_USER(7);
 		
-		int code;
+		private int code;
 		
 		private TFTPError (int code)
 		{
@@ -405,7 +405,7 @@ public abstract class TFTPPacket {
 			this.blockNum = ((int)bytes[3]) | (((int)bytes[2]) << 8);
 			
 			if (bytes.length > 4) {
-				this.data = Arrays.copyOfRange(bytes, 4, bytes.length - 1);
+				this.data = Arrays.copyOfRange(bytes, 3, bytes.length - 1);
 			} else {
 				this.data = new byte[] {};
 			}
