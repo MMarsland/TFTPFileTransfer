@@ -9,19 +9,14 @@ import org.apache.commons.cli.*;
 
 class Listener implements Runnable {
 	private DatagramSocket sendReceiveSocket, receiveSocket;
-	private int listenerPort, serverPort;
+	private int serverPort;
 	private InetAddress serverAddress;
 	private boolean verbose;
 	
 	public Listener(int listenerPort, InetAddress server, int serverPort, boolean verbose) {
-		this.listenerPort = listenerPort;
 		this.serverPort = serverPort;
 		this.verbose = verbose;
 		serverAddress = server;
-		
-		if(verbose) {
-			System.out.println("Setting up send/receive socket");
-		}
 		
 		try { //Set up the socket that will be used to send/receive packets to/from server
 			sendReceiveSocket = new DatagramSocket();
@@ -29,10 +24,6 @@ class Listener implements Runnable {
 			se.printStackTrace();
 			System.exit(1);
 	    }
-		
-		if(verbose) {
-			System.out.println("Setting up receive socket on port" + listenerPort);
-		}
 		
 		try { //Set up the socket that will be used to receive packets from client
 			receiveSocket = new DatagramSocket(listenerPort);
@@ -221,7 +212,12 @@ public class ErrorSim {
 	        System.exit(1);
 	    }
 		
-		System.out.println("Error Simulator Running"); 
+		System.out.println("Error Simulator Running");
+		
+		if(verbose) {
+			System.out.println("Listening to client on port " + clientPort);
+			System.out.println("Server address: " + serverAddress + " port " + serverPort);
+		}
 		
 		Listener listener = new Listener(clientPort, serverAddress, serverPort, verbose);
 		Thread listenerThread = new Thread(listener);
