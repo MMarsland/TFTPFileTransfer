@@ -115,12 +115,12 @@ class ReadHandler extends RequestHandler implements Runnable {
 	protected TFTPPacket.RRQ request;
 	protected int blockNum = 0;
 	
-	public ReadHandler(DatagramPacket receivePacket, TFTPPacket request, boolean verbose) {
+	public ReadHandler(DatagramPacket receivePacket, TFTPPacket.RRQ request, boolean verbose) {
 		if(verbose) {
 			System.out.println("Setting up Read Handler");
 		}
 		this.receivePacket = receivePacket;
-		this.request = (TFTPPacket.RRQ) request;
+		this.request = request;
 		this.verbose = verbose;
 		this.clientTID = this.receivePacket.getPort();
 		this.clientAddress = this.receivePacket.getAddress();
@@ -140,9 +140,7 @@ class ReadHandler extends RequestHandler implements Runnable {
 		if(this.verbose) {
 			System.out.println("Handling Read Request");
 		}
-		TFTPPacket.DATA dataPacket;
-	    DatagramPacket sendPacket;
-		
+	    
 		FileInputStream fis = null;
 		try {
 			fis = new FileInputStream(this.filename);
@@ -154,11 +152,15 @@ class ReadHandler extends RequestHandler implements Runnable {
 			System.out.println("File Successfully Opened! filename: "+this.filename);
 		}
 		
+		TFTPPacket.DATA dataPacket;
+	    DatagramPacket sendPacket;
+	    DatagramPacket recievePacket;
+	    byte[] data = new byte[512];
+	    int len = 69999; 
+	    
 		boolean moreToRead = true;
 		while (moreToRead) {
 			// Read data from file into data packet
-			byte[] data = new byte[512];
-		    int len = 69999; 
 		    this.blockNum++;
 		    this.blockNum = this.blockNum & 0xFFFF;
 		    if(this.verbose) {
@@ -204,10 +206,11 @@ class ReadHandler extends RequestHandler implements Runnable {
 				System.out.println("Waiting for ack packet");
 			}
 		    
+		    // New Receive total bytes
 		    data = new byte[TFTPPacket.MAX_SIZE];
-		    DatagramPacket ackPacket = new DatagramPacket(data, data.length);
+		    DatagramPacket receivePacket = new DatagramPacket(data, data.length);
 		    try {
-	    		sendReceiveSocket.receive(ackPacket);
+	    		sendReceiveSocket.receive(receivePacket);
 	    	} catch(IOException e) {
 	    		e.printStackTrace();
     			System.exit(1);
@@ -218,18 +221,18 @@ class ReadHandler extends RequestHandler implements Runnable {
 			}
 		    
 		    // Parse ACK for correctness
-		    TFTPPacket.ACK response = null;
+		    TFTPPacket.ACK ackPacket = null;
 	    	try {
-				response = new TFTPPacket.ACK(Arrays.copyOf(ackPacket.getData(), ackPacket.getLength()));
+				ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 			} catch (IllegalArgumentException e) {
-				System.out.println("Not a ack response to data! :((((");
+				System.out.println("Not a ack ackPacket to data! :((((");
 				e.printStackTrace();
 				System.exit(0);
 			}
-	    	if (response.getBlockNum() == this.blockNum ) {
+	    	if (ackPacket.getBlockNum() == this.blockNum ) {
 				// Correct acks
 				if(this.verbose) {
-					System.out.println("Recieved ack for block #"+((TFTPPacket.ACK) response).getBlockNum());
+					System.out.println("Recieved ack for block #"+((TFTPPacket.ACK) ackPacket).getBlockNum());
 				}
 			} else {
 				// Incorrect ack
@@ -292,8 +295,8 @@ class WriteHandler extends RequestHandler implements Runnable {
 			System.out.println("Handling Write Request");
 		}
 		// Send first Ack Package
-	    TFTPPacket.ACK firstAck = new TFTPPacket.ACK(0);
-	    DatagramPacket sendPacket = new DatagramPacket(firstAck.toBytes(), firstAck.toBytes().length, clientAddress, clientTID);
+	    TFTPPacket.ACK ackPacket = new TFTPPacket.ACK(0);
+	    DatagramPacket sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, clientAddress, clientTID);
 	    // Send data packet to client on Client TID
 	    try {
     		sendReceiveSocket.send(sendPacket);
@@ -314,6 +317,10 @@ class WriteHandler extends RequestHandler implements Runnable {
 		}
 	    
 		byte[] data = new byte[TFTPPacket.MAX_SIZE];
+		DatagramPacket receivePacket;
+		TFTPPacket.DATA dataPacket;
+		int len = 699999;
+		int blockNum = 699999;
 	    // Receive data and send acks
 		boolean moreToWrite = true;
 		while (moreToWrite) {
@@ -323,7 +330,7 @@ class WriteHandler extends RequestHandler implements Runnable {
 			}
 		    
 		    data = new byte[TFTPPacket.MAX_SIZE];
-		    DatagramPacket receivePacket = new DatagramPacket(data, data.length);
+		    receivePacket = new DatagramPacket(data, data.length);
 		    try {
 	    		sendReceiveSocket.receive(receivePacket);
 	    	} catch(IOException e) {
@@ -334,7 +341,7 @@ class WriteHandler extends RequestHandler implements Runnable {
 				System.out.println("Recieved data packet from client");
 			}
 			// Check Packet for correctness
-		    TFTPPacket.DATA dataPacket = null;
+		    
 	    	try {
 				dataPacket = new TFTPPacket.DATA(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 			} catch (IllegalArgumentException e) {
@@ -344,9 +351,9 @@ class WriteHandler extends RequestHandler implements Runnable {
 			}
 	    	// Definitely data :)
 			// Strip block number
-		    int blockNum = dataPacket.getBlockNum();
+		    blockNum = dataPacket.getBlockNum();
 			// Check size? Less than 512 == done
-		    int len = dataPacket.getData().length;
+		    len = dataPacket.getData().length;
 		    if (len < 512) {
 		    	moreToWrite = false;
 		    }
@@ -364,7 +371,7 @@ class WriteHandler extends RequestHandler implements Runnable {
 		    
 		    
 			// Send Acknowledgement packet with block number
-		    TFTPPacket.ACK ackPacket = new TFTPPacket.ACK(blockNum);
+		    ackPacket = new TFTPPacket.ACK(blockNum);
 		    sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, clientAddress, clientTID);
 		    
 		    if(this.verbose) {
@@ -387,7 +394,7 @@ class WriteHandler extends RequestHandler implements Runnable {
 				System.out.println("Waiting for Next Data Block:");
 			}
 		}
-		// All data recieved and writes performed and last ack sent
+		// All data received and writes performed and last ack sent
 		if(this.verbose) {
 			System.out.println("Write Request complete! Closing socket.");
 		}
