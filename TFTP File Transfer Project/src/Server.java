@@ -74,11 +74,11 @@ class ServerListener implements Runnable {
 			}
 	    	// Create a handler thread
 			if (request instanceof TFTPPacket.RRQ) {
-				ReadHandler handler = new ReadHandler(receivePacket, request, verbose);
+				ReadHandler handler = new ReadHandler(receivePacket, (TFTPPacket.RRQ) request, verbose);
 				Thread handlerThread = new Thread(handler);
 				handlerThread.start();
 	    	} else if (request instanceof TFTPPacket.WRQ) {
-	    		WriteHandler handler = new WriteHandler(receivePacket, request, verbose);
+	    		WriteHandler handler = new WriteHandler(receivePacket, (TFTPPacket.WRQ) request, verbose);
 				Thread handlerThread = new Thread(handler);
 				handlerThread.start();
 	    	} else {
@@ -267,12 +267,12 @@ class WriteHandler extends RequestHandler implements Runnable {
 	protected TFTPPacket.WRQ request;
 	protected TFTPPacket.TFTPMode mode;
 	
-	public WriteHandler(DatagramPacket receivePacket, TFTPPacket request, boolean verbose) {
+	public WriteHandler(DatagramPacket receivePacket, TFTPPacket.WRQ request, boolean verbose) {
 		if(verbose) {
 			System.out.println("Setting up Write Handler");
 		}
 		this.receivePacket = receivePacket;
-		this.request = (TFTPPacket.WRQ) request;
+		this.request = request;
 		this.verbose = verbose;
 		this.clientTID = this.receivePacket.getPort();
 		this.clientAddress = this.receivePacket.getAddress();
@@ -318,7 +318,7 @@ class WriteHandler extends RequestHandler implements Runnable {
 	    
 		byte[] data = new byte[TFTPPacket.MAX_SIZE];
 		DatagramPacket receivePacket;
-		TFTPPacket.DATA dataPacket;
+		TFTPPacket.DATA dataPacket = null;
 		int len = 699999;
 		int blockNum = 699999;
 	    // Receive data and send acks
@@ -343,6 +343,9 @@ class WriteHandler extends RequestHandler implements Runnable {
 			// Check Packet for correctness
 		    
 	    	try {
+	    		int length = receivePacket.getLength();
+	    		System.out.println("The receive packet has length: "+length);
+	    		System.out.println("And looks like this: "+receivePacket.getData()[0]+", "+receivePacket.getData()[1]+", "+receivePacket.getData()[2]+", "+receivePacket.getData()[3]+", "+receivePacket.getData()[4]);
 				dataPacket = new TFTPPacket.DATA(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 			} catch (IllegalArgumentException e) {
 				System.out.println("Not a data response to ack! :((((");
@@ -362,7 +365,7 @@ class WriteHandler extends RequestHandler implements Runnable {
 			}
 			// Write into file
 		    try {
-				fos.write(dataPacket.getData());
+				fos.write(dataPacket.getData(),0,dataPacket.getData().length);
 			} catch (IOException e) {
 				System.out.println("Failed to write data to file!");
 				e.printStackTrace();
