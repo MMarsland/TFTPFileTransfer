@@ -38,8 +38,11 @@ class ErrorSimListener implements Runnable {
     	System.arraycopy(packet.getData(), 0, packetData, 0, packet.getLength());
     	TFTPPacket parsedPacket = TFTPPacket.parse(packetData);
     	
-    	//Shouldn't one of these instanceof checks be for TFTPPacket.RRQ? -Scott
-    	return (parsedPacket instanceof TFTPPacket.WRQ || parsedPacket instanceof TFTPPacket.WRQ); /* Is this a typo? -MM0515*/
+    	return (parsedPacket instanceof TFTPPacket.WRQ || parsedPacket instanceof TFTPPacket.RRQ);
+	}
+	
+	public void setVerbose(boolean mode) {
+		verbose = mode;
 	}
 	
 	public void run(){
@@ -245,7 +248,80 @@ public class ErrorSim {
 					} catch (InterruptedException e) {
 						e.printStackTrace();
 					}
+					in.close();
 					System.exit(0);
+				}
+			}
+			//Handle the verbose command
+			else if(split[0].toLowerCase().equals("verbose")) {
+				if(split.length > 1) {
+					System.out.println("Error: Too many parameters.");
+				}
+				else {
+					verbose = true;
+					listener.setVerbose(true);
+				}
+			}
+			//Handle the quiet command
+			else if(split[0].toLowerCase().equals("quiet")) {
+				if(split.length > 1) {
+					System.out.println("Error: Too many parameters.");
+				}
+				else {
+					verbose = false;
+					listener.setVerbose(false);
+				}
+			}
+			//Handle the clientport command
+			else if(split[0].toLowerCase().equals("clientport")) {
+				if(split.length > 2) {
+					System.out.println("Error: Too many parameters.");
+				}
+				else if(split.length == 1) {
+					System.out.println("Client port: " + clientPort);
+				}
+				else if(split.length == 2) {
+					int port = Integer.parseInt(split[1]);
+					if(port > 0 && port < 65536) {
+						clientPort = port;
+					}
+					else {
+						System.out.println("Invalid argument");
+					}
+				}
+			}
+			//Handle the serverport command
+			else if(split[0].toLowerCase().equals("serverport")) {
+				if(split.length > 2) {
+					System.out.println("Error: Too many parameters.");
+				}
+				else if(split.length == 1) {
+					System.out.println("Server port: " + serverPort);
+				}
+				else if(split.length == 2) {
+					int port = Integer.parseInt(split[1]);
+					if(port > 0 && port < 65536) {
+						serverPort = port;
+					}
+					else {
+						System.out.println("Invalid argument");
+					}
+				}
+			}
+			//Handle the serverip command
+			else if(split[0].toLowerCase().equals("serverip")) {
+				if(split.length > 2) {
+					System.out.println("Error: Too many parameters.");
+				}
+				else if(split.length == 1) {
+					System.out.println("Server ip " + serverAddress);
+				}
+				else if(split.length == 2) {
+					try {
+						serverAddress = InetAddress.getByName(split[1]);
+					} catch (UnknownHostException e) {
+						System.out.println("Invalid argument");
+					}
 				}
 			}
 			//Handle commands that do not exist
