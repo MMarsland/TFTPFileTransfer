@@ -1,3 +1,7 @@
+/**
+ * ErrorSim is the intermediate host between the TFTP server and client.
+ */
+
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -7,12 +11,24 @@ import java.net.UnknownHostException;
 import java.util.Scanner;
 import org.apache.commons.cli.*;
 
+/**
+ * ErrorSimListener class handles communication between the client and server.
+ * It forwards packets from the client to the server an vice versa.
+ */
 class ErrorSimListener implements Runnable {
 	private DatagramSocket sendReceiveSocket, receiveSocket;
 	private int serverPort;
 	private InetAddress serverAddress;
 	private boolean verbose;
 	
+	/**
+	 * Constructor for the ErrorSimListener class.
+	 * @param listenerPort The port that will listen to requests from the client.
+	 * @param server The IP address of the server.
+	 * @param serverPort The port number on the server to send requests to.
+	 * @param verbose true enables verbose mode to output debug info, false disables verbose
+	 * mode so less information is output.
+	 */
 	public ErrorSimListener(int listenerPort, InetAddress server, int serverPort, boolean verbose) {
 		this.serverPort = serverPort;
 		this.verbose = verbose;
@@ -33,6 +49,11 @@ class ErrorSimListener implements Runnable {
 	    }
 	}
 	
+	/**
+	 * Checks if a DatagramPacket contains a read request or a write request
+	 * @param packet The packet to check
+	 * @return true if the packet is a read or write request, false otherwise
+	 */
 	private boolean isRequestRW(DatagramPacket packet) {
 		byte[] packetData = new byte[packet.getLength()];
     	System.arraycopy(packet.getData(), 0, packetData, 0, packet.getLength());
@@ -41,10 +62,17 @@ class ErrorSimListener implements Runnable {
     	return (parsedPacket instanceof TFTPPacket.WRQ || parsedPacket instanceof TFTPPacket.RRQ);
 	}
 	
+	/**
+	 * Enable/disables verbose mode on the listener thread
+	 * @param mode true enables verbose mode, false disables it
+	 */
 	public void setVerbose(boolean mode) {
 		verbose = mode;
 	}
 	
+	/**
+	 * The run method required to implement Runnable.
+	 */
 	public void run(){
 		byte data[] = new byte[516];
 	    DatagramPacket receivePacket = new DatagramPacket(data, data.length);
@@ -137,17 +165,29 @@ class ErrorSimListener implements Runnable {
 	    }
 	}
 	
-	public void kill()
+	/**
+	 * Closes the sockets used by the listener to clean up resources
+	 * and also cause the listener thread to exit
+	 */
+	public void close()
 	{
 		sendReceiveSocket.close();
 	    receiveSocket.close();
 	}
 }
 
+/**
+ * ErrorSim class handles the setup of the error simulator and acts as the UI thread.
+ */
 public class ErrorSim {
 
+	/**
+	 * main function for the error simulator
+	 * @param args Command line arguments
+	 */
 	public static void main(String[] args) {
 		
+		//Initialize settings to default values
 		Boolean verbose = false;
 		int serverPort = 69;
 		int clientPort = 23;
@@ -159,6 +199,7 @@ public class ErrorSim {
 			System.exit(1);
 		}
 		
+		//Setup command line parser
 		Option verboseOption = new Option( "v", "verbose", false, "print extra debug info" );
 		
 		Option serverPortOption = Option.builder("sp").argName("server port")
@@ -223,6 +264,7 @@ public class ErrorSim {
 			System.out.println("Server address: " + serverAddress + " port " + serverPort);
 		}
 		
+		//Create the listener thread
 		ErrorSimListener listener = new ErrorSimListener(clientPort, serverAddress, serverPort, verbose);
 		Thread listenerThread = new Thread(listener);
 		listenerThread.start();
@@ -242,7 +284,7 @@ public class ErrorSim {
 					System.out.println("Error: Too many parameters.");
 				}
 				else {
-					listener.kill();
+					listener.close();
 					try {
 						listenerThread.join();
 					} catch (InterruptedException e) {
@@ -323,6 +365,23 @@ public class ErrorSim {
 						System.out.println("Invalid argument");
 					}
 				}
+			}
+			//Handle the help command
+			else if(split[0].toLowerCase().equals("help")) {
+				System.out.println("The following is a list of commands and thier usage:");
+				System.out.println("shutdown - Closes the error simulator program.");
+				System.out.println("verbose - Makes the error simulator output more detailed information.");
+				System.out.println("quiet - Makes the error simulator output only basic information.");
+				System.out.println("clientport [x] - Outputs the port currently being used to listen to requests "
+						+ "from the client if x is not provided. If parameter x is provided, then the port "
+						+ "is changed to x.");
+				System.out.println("serverport [x] - Outputs the port currently being used to forward requests "
+						+ "to the server if x is not provided. If parameter x is provided, then the port "
+						+ "is changed to x.");
+				System.out.println("serverip [x] - Outputs the IP address currently being used to communicate with "
+						+ "the server if x is not provided. If parameter x is provided, then the IP address "
+						+ "is changed to x.");
+				System.out.println("help - Shows help information.");
 			}
 			//Handle commands that do not exist
 			else {
