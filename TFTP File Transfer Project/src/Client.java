@@ -248,7 +248,7 @@ public class Client {
 	    	}
 		    
 		    if(verbose) {
-				System.out.println("Recieved packet from client");
+				System.out.println("Recieved packet from server.");
 			}
 		    
 		    // Parse ACK for correctness
@@ -297,6 +297,7 @@ public class Client {
 		 */
 		DatagramPacket sendPacket = null;
 		
+		
 		/*
 		 * Checking which file (source or dest) is on the server to determine the type of
 		 * request.
@@ -317,7 +318,7 @@ public class Client {
 			TFTPPacket.RRQ readPacket = new TFTPPacket.RRQ(filepath, TFTPPacket.TFTPMode.NETASCII);
 			sendPacket = new DatagramPacket(readPacket.toBytes(), readPacket.size(), serverAddress, serverPort);
 			
-			System.out.println("Sending request.");
+			System.out.println("Sending read request.");
 			try {
 				sendReceiveSocket.send(sendPacket);
 			} catch(IOException e) {
@@ -325,7 +326,9 @@ public class Client {
 				System.exit(1);
 			}
 			
-			System.out.println("Packet Sent.  Waiting for response from server...");
+			System.out.println("Request sent.  Waiting for response from server...");
+			
+			filename = dest;
 			
 			read();
 			
@@ -344,7 +347,7 @@ public class Client {
 			TFTPPacket.WRQ writePacket = new TFTPPacket.WRQ(filepath, TFTPPacket.TFTPMode.NETASCII);
 			sendPacket = new DatagramPacket(writePacket.toBytes(), writePacket.size(), serverAddress, serverPort);
 			
-			System.out.println("Sending request.");
+			System.out.println("Sending write request.");
 			try {
 				sendReceiveSocket.send(sendPacket);
 			} catch(IOException e) {
@@ -352,7 +355,9 @@ public class Client {
 				System.exit(1);
 			}
 			
-			System.out.println("Packet Sent.  Waiting for response from server...");
+			System.out.println("Request sent.  Waiting for response from server...");
+			
+			filename = source;
 			
 			write();
 		}
@@ -380,6 +385,9 @@ public class Client {
 		// The file locations that we'll transfer data to/from.  The order of the filenames will determine
 		// if this is a read or write request (Server file first = RRQ, server file last = WRQ).
 		String source, dest;
+		String[] split;
+		String command = null;
+		Scanner in = new Scanner(System.in);
 		
 		//Setting up the parsing options
 		Option verboseOption = new Option( "v", "verbose", false, "print extra debug info" );
@@ -403,10 +411,38 @@ public class Client {
 	        
 	        if( line.hasOption("verbose")) {
 		        verbose = true;
+		    } else {
+		    	System.out.println("Verbose?");
+				command = in.nextLine();
+				split = command.split("\\s+");
+				if(split[0].toLowerCase().equals("shutdown")) {
+					if(verbose) {
+						System.out.println("Closing socket and scanner, and shutting down server.");
+					}
+					sendReceiveSocket.close();
+					in.close();
+					System.exit(0);
+				}
+				if(split[0].toLowerCase().equals("y") || command.toLowerCase().equals("yes")) {
+					verbose = true;
+				}
 		    }
 	        
 	        if( line.hasOption("sp")) {
 		        serverPort = Integer.parseInt(line.getOptionValue("sp"));
+		    } else {
+		    	System.out.println("Enter the server port number");
+		    	command = in.nextLine();
+		    	split = command.split("\\s+");
+		    	if(split[0].toLowerCase().equals("shutdown")) {
+					if(verbose) {
+						System.out.println("Closing socket and scanner, and shutting down server.");
+					}
+					sendReceiveSocket.close();
+					in.close();
+					System.exit(0);
+				}
+		    	serverPort = Integer.valueOf(split[0]);
 		    }
 	    } catch( ParseException exp ) {
 	    	System.err.println( "Command line argument parsing failed.  Reason: " + exp.getMessage() );
@@ -414,14 +450,10 @@ public class Client {
 	    }
 	    
 	    //Not sure if this works or not
-		String[] split = line.getArgs();
-		source = split[0];
-		dest = split[1];
+		split = line.getArgs();
 		
 		//Sends a prompt to provide filenames if none were given
-		String command = null;
-		Scanner in = new Scanner(System.in);
-		if(split[0] == null || split[1] == null) {
+		if(split.length < 2) {
 			System.out.println("Enter a command in the format: sourceFilePath destinationFilePath");
 			System.out.println("For RRQ, sourceFilePath should be the server file.  For WRQ, destinationFilePath should be the server file.");
 			System.out.println("Enter 'shutdown' to close client.");
@@ -439,42 +471,11 @@ public class Client {
 				in.close();
 				System.exit(0);
 			}
+		} else {
+			source = split[0];
+			dest = split[1];
 		}
-		/* 
-		 * Prompts user for the port number and verbose option if they were not specified
-		 * in the command line arguments.  "Shutdown" can also be entered in response to these
-		 * prompts.
-		 */
-		if(serverPort == -1) {
-	    	System.out.println("Enter the server port number");
-	    	command = in.nextLine();
-	    	split = command.split("\\s+");
-	    	if(split[0].toLowerCase().equals("shutdown")) {
-				if(verbose) {
-					System.out.println("Closing socket and scanner, and shutting down server.");
-				}
-				sendReceiveSocket.close();
-				in.close();
-				System.exit(0);
-			}
-	    	serverPort = Integer.valueOf(split[0]);
-	    }
-		if(verbose == false) {
-			System.out.println("Verbose?");
-			command = in.nextLine();
-			split = command.split("\\s+");
-			if(split[0].toLowerCase().equals("shutdown")) {
-				if(verbose) {
-					System.out.println("Closing socket and scanner, and shutting down server.");
-				}
-				sendReceiveSocket.close();
-				in.close();
-				System.exit(0);
-			}
-			if(split[0].toLowerCase().equals("y") || command.toLowerCase().equals("yes")) {
-				verbose = true;
-			}
-		}
+		
 		
 		/*
 		 * Calls the buildRequest function
