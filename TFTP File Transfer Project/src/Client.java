@@ -53,7 +53,7 @@ public class Client {
 		if(verbose) {
 			System.out.println("Reading from server file");
 		}
-		// Send first Ack Package
+		
 		TFTPPacket.ACK ackPacket = new TFTPPacket.ACK(0);
 		DatagramPacket sendPacket;
 		FileOutputStream fos = null;
@@ -183,10 +183,46 @@ public class Client {
 		
 		TFTPPacket.DATA dataPacket;
 	    DatagramPacket sendPacket, receivePacket;
-	    byte[] data = new byte[512];
+	    byte[] data = new byte[TFTPPacket.MAX_SIZE];
 	    int len = 69999;
 		int blockNum = 0;
 	    
+		//Receiving the first ACK packet and stripping the new port number
+	    receivePacket = new DatagramPacket(data, data.length);
+	    try {
+    		sendReceiveSocket.receive(receivePacket);
+    	} catch(IOException e) {
+    		e.printStackTrace();
+			System.exit(1);
+    	}
+	    
+	    if(verbose) {
+			System.out.println("Recieved packet from server.");
+		}
+	    
+	    // Parse ACK for correctness
+	    TFTPPacket.ACK ackPacket = null;
+    	try {
+			ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
+		} catch (IllegalArgumentException e) {
+			System.out.println("Not an ACK Packet! :((((");
+			e.printStackTrace();
+			System.exit(0);
+		}
+    	if (ackPacket.getBlockNum() == 0 ) {
+			// Correct acks
+			if(verbose) {
+				System.out.println("Recieved ACK for block #0.  Starting data transfer...");
+				replyPort = receivePacket.getPort();
+			}
+		} else {
+			// Incorrect ack
+			System.out.println("Wrong ACK response. Incorrect block number");
+    		throw new IllegalArgumentException();
+		}
+    	
+		replyPort = receivePacket.getPort();
+		
 		boolean moreToRead = true;
 		while (moreToRead) {
 			// Read data from file into data packet
@@ -242,10 +278,11 @@ public class Client {
     			System.exit(1);
 	    	}
 		    
-		 // Parse ACK for correctness
-		    TFTPPacket.ACK ackPacket = null;
+		    // Parse ACK for correctness
+		    ackPacket = null;
 	    	try {
 				ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
+				replyPort = receivePacket.getPort();
 			} catch (IllegalArgumentException e) {
 				System.err.println("Wrong Packet Recieved. Reason: Not an ackPacket");
 				e.printStackTrace();
