@@ -454,11 +454,65 @@ public class Client {
 	        
 	        if( line.hasOption("verbose")) {
 		        verbose = true;
+		    }
+	        
+	        if( line.hasOption("sp")) {
+		        serverPort = Integer.parseInt(line.getOptionValue("sp"));
 		    } else {
-		    	System.out.println("Verbose?");
-		    	System.out.print(">> ");
+		    	//Continually ask for a server port number until one is specified
+		    	while(serverPort < 1) {
+		    		System.out.println("Enter the well-known server port number for requests (Port number must be positive)");
+		    		System.out.print(">> ");
+		    		command = in.nextLine();
+		    		split = command.split("\\s+");
+		    		if(split[0].toLowerCase().equals("shutdown")) {
+						if(verbose) {
+							System.out.println("Closing socket and scanner, and shutting down server.");
+						}
+						sendReceiveSocket.close();
+						in.close();
+						System.exit(0);
+					}
+		    		try {
+		    			serverPort = Integer.valueOf(split[0]);
+		    		} catch(NumberFormatException e) {
+		    			System.out.println("No integer values found.  Please enter an integer value.");
+		    		}
+		    	}
+		    }
+	    } catch( ParseException exp ) {
+	    	System.err.println( "Command line argument parsing failed.  Reason: " + exp.getMessage() );
+		    System.exit(1);
+	    }
+	    
+	    //Gets anything remaining in the command line and initializes source and dest
+		split = line.getArgs();
+		source = null;
+		dest = null;
+		
+		//Sends a prompt to provide filenames if none were given
+		if(split.length < 2) {
+			while(source == null || dest == null) {
+				System.out.print(">> ");
 				command = in.nextLine();
 				split = command.split("\\s+");
+				
+				if(split[0].toLowerCase().equals("help")) {
+					System.out.println("Enter a request in the format: sourceFilePath destinationFilePath");
+					System.out.println("	For RRQ, sourceFilePath should be the server file.  For WRQ, destinationFilePath should be the server file.");
+					System.out.println("	Ex. for a RRQ: 123.456.7.89/Users/name/source.txt /Users/name/destination");
+					System.out.println("Enter 'shutdown' to close client.");
+					System.out.println("Enter 'verbose' to display more information while transferring");
+					System.out.println("Enter 'quiet' to exit verbose mode");
+				}
+				if(split[0].toLowerCase().equals("verbose")) {
+					System.out.println("Running in verbose mode.");
+					verbose = true;
+				}
+				if(split[0].toLowerCase().equals("quiet")) {
+					System.out.println("Running in quiet mode.");
+					verbose = false;
+				}
 				if(split[0].toLowerCase().equals("shutdown")) {
 					if(verbose) {
 						System.out.println("Closing socket and scanner, and shutting down server.");
@@ -467,58 +521,12 @@ public class Client {
 					in.close();
 					System.exit(0);
 				}
-				if(split[0].toLowerCase().equals("y") || command.toLowerCase().equals("yes")) {
-					verbose = true;
+				
+				if(split.length == 2) {
+					source = split[0];
+					dest = split[1];
 				}
-		    }
-	        
-	        if( line.hasOption("sp")) {
-		        serverPort = Integer.parseInt(line.getOptionValue("sp"));
-		    } else {
-		    	System.out.println("Enter the server port number");
-		    	System.out.print(">> ");
-		    	command = in.nextLine();
-		    	split = command.split("\\s+");
-		    	if(split[0].toLowerCase().equals("shutdown")) {
-					if(verbose) {
-						System.out.println("Closing socket and scanner, and shutting down server.");
-					}
-					sendReceiveSocket.close();
-					in.close();
-					System.exit(0);
-				}
-		    	serverPort = Integer.valueOf(split[0]);
-		    }
-	    } catch( ParseException exp ) {
-	    	System.err.println( "Command line argument parsing failed.  Reason: " + exp.getMessage() );
-		    System.exit(1);
-	    }
-	    
-	    //Not sure if this works or not
-		split = line.getArgs();
-		
-		//Sends a prompt to provide filenames if none were given
-		if(split.length < 2) {
-			System.out.println("Enter a command in the format: sourceFilePath destinationFilePath");
-			System.out.print(">> ");
-			command = in.nextLine();
-			split = command.split("\\s+");
-			
-			source = split[0];
-			dest = split[1];
-			
-			if(split[0].toLowerCase().equals("help")) {
-				System.out.println("For RRQ, sourceFilePath should be the server file.  For WRQ, destinationFilePath should be the server file.");
-				System.out.println("Enter 'shutdown' to close client.");
-			}
-			if(split[0].toLowerCase().equals("shutdown")) {
-				if(verbose) {
-					System.out.println("Closing socket and scanner, and shutting down server.");
-				}
-				sendReceiveSocket.close();
-				in.close();
-				System.exit(0);
-			}
+			} 
 		} else {
 			source = split[0];
 			dest = split[1];
@@ -539,15 +547,26 @@ public class Client {
 		 */
 		//Currently there is no way to set finished to true, but this might be used in the future.
 		while(!finished) {
-			verbose = false;
-			System.out.println("Enter a command in the format: requestType sourceFilePath destinationFilePath");
-			System.out.println("For RRQ, sourceFilePath should be the server file.  For WRQ, destinationFilePath "
-									+ "should be the server file.");
-			System.out.println("Enter 'shutdown' to close client.");
 			System.out.print(">> ");
 			command = in.nextLine();
 			split = command.split("\\s+");
 			
+			if(split[0].toLowerCase().equals("help")) {
+				System.out.println("Enter a request in the format: sourceFilePath destinationFilePath");
+				System.out.println("	For RRQ, sourceFilePath should be the server file.  For WRQ, destinationFilePath should be the server file.");
+				System.out.println("	Ex. for a RRQ 123.456.7.89/Users/name/source.txt /Users/name/destination");
+				System.out.println("Enter 'shutdown' to close client.");
+				System.out.println("Enter 'verbose' to display more information while transferring");
+				System.out.println("Enter 'quiet' to exit verbose mode");
+			}
+			if(split[0].toLowerCase().equals("verbose")) {
+				System.out.println("Running in verbose mode.");
+				verbose = true;
+			}
+			if(split[0].toLowerCase().equals("quiet")) {
+				System.out.println("Running in quiet mode.");
+				verbose = false;
+			}
 			if(split[0].toLowerCase().equals("shutdown")) {
 				if(verbose) {
 					System.out.println("Closing socket and scanner, and shutting down server.");
@@ -558,16 +577,9 @@ public class Client {
 				break;
 			}
 			
-			source = split[0];
-			dest = split[1];
-			
-			if(verbose == false) {
-				System.out.println("Verbose?");
-				System.out.print(">> ");
-				command = in.nextLine();
-				if(command.toLowerCase().equals("y") || command.toLowerCase().equals("yes")) {
-					verbose = true;
-				}
+			if(split.length == 2) {
+				source = split[0];
+				dest = split[1];
 			}
 			
 			buildRequest(source, dest);
