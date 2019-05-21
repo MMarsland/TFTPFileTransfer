@@ -500,7 +500,7 @@ public class Client {
 				if(split[0].toLowerCase().equals("help")) {
 					System.out.println("Enter a request in the format: sourceFilePath destinationFilePath");
 					System.out.println("	For RRQ, sourceFilePath should be the server file.  For WRQ, destinationFilePath should be the server file.");
-					System.out.println("	Ex. for a RRQ: 123.456.7.89/Users/name/source.txt /Users/name/destination");
+					System.out.println("	Ex. for a RRQ: 123.456.7.89:/Users/name/source.txt /Users/name/destination");
 					System.out.println("Enter 'shutdown' to close client.");
 					System.out.println("Enter 'verbose' to display more information while transferring");
 					System.out.println("Enter 'quiet' to exit verbose mode");
@@ -538,8 +538,6 @@ public class Client {
 		 */
 		buildRequest(source, dest);
 		
-		System.out.println("Client Idle.");
-		
 		/*
 		 * Loops until the client is shut down.  Prompts the user for filepaths, server port
 		 * changes, and the verbose option when the previous transfer has finished, then calls
@@ -556,7 +554,7 @@ public class Client {
 			if(split[0].toLowerCase().equals("help")) {
 				System.out.println("Enter a request in the format: sourceFilePath destinationFilePath");
 				System.out.println("	For RRQ, sourceFilePath should be the server file.  For WRQ, destinationFilePath should be the server file.");
-				System.out.println("	Ex. for a RRQ 123.456.7.89/Users/name/source.txt /Users/name/destination");
+				System.out.println("	Ex. for a RRQ: 123.456.7.89:/Users/name/source.txt /Users/name/destination");
 				System.out.println("Enter 'shutdown' to close client.");
 				System.out.println("Enter 'verbose' to display more information while transferring");
 				System.out.println("Enter 'quiet' to exit verbose mode");
