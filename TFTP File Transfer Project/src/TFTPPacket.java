@@ -1,6 +1,11 @@
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
+/**
+ * Represents a TFTP packet which has been received or will be sent
+ * 
+ * @author Samuel Dewan
+ */
 public abstract class TFTPPacket {
 	
 	/**
@@ -27,16 +32,29 @@ public abstract class TFTPPacket {
 	public abstract byte[] toBytes();
 	
 	/**
-	 * Get the length of a marshaled packet.
+	 * Get the number of bytes in the marshaled representation of this
+	 * packet.
 	 * 
-	 * @return The length of the marshaled packet
+	 * @param The number of bytes in the marshaled representation of this
+	 * packet.
 	 */
 	public abstract int size();
 	
 	/**
-	 * Get a string representation of a packet.
+	 * Get a string representation of this packet.
+	 * 
+	 * @return A string representation of this packet
 	 */
 	public abstract String toString();
+	
+	/**
+	 * Print the type, parameters and number of bytes for a TFTPPacket
+	 */
+	public void print()
+	{
+		System.out.printf("Packet: %s (%d bytes)\n", this.toString(),
+				this.size());
+	}
 	
 	
 	/**
@@ -70,7 +88,11 @@ public abstract class TFTPPacket {
 		}
 	}
 	
-	
+	/**
+	 * Represents the mode field of a TFTP read or write request.
+	 * 
+	 * @author Samuel Dewan
+	 */
 	public static enum TFTPMode {
 		NETASCII, OCTET, MAIL;
 		
@@ -95,6 +117,10 @@ public abstract class TFTPPacket {
 			}
 		}
 		
+		/**
+		 * Get a string representation of the mode as it should be formated in
+		 * the packet to be transmitted.
+		 */
 		public String toString()
 		{
 			switch (this) {
@@ -111,11 +137,19 @@ public abstract class TFTPPacket {
 		}
 	}
 	
+	/**
+	 * Represents the error code from a TFTP error packet.
+	 * 
+	 * @author Samuel Dewan
+	 */
 	public static enum TFTPError {
 		ERROR(0), FILE_NOT_FOUND(1), ACCESS_VIOLATION(2), DISK_FULL(3),
 		ILLEGAL_OPERATION(4), UNKOWN_TRANSFER_ID(5), FILE_ALREADY_EXISTS(6),
 		NO_SUCH_USER(7);
 		
+		/**
+		 * The integer value of the error code
+		 */
 		private int code;
 		
 		private TFTPError (int code)
@@ -123,6 +157,12 @@ public abstract class TFTPPacket {
 			this.code = code;
 		}
 		
+		/**
+		 * Create a TFTPError to represent a given error code.
+		 * 
+		 * @param code The error code
+		 * @return A TFTPError instance which represents the error code
+		 */
 		public static TFTPError fromCode(int code)
 		{
 			switch (code) {
@@ -148,7 +188,11 @@ public abstract class TFTPPacket {
 		}
 	}
 	
-	
+	/**
+	 * Represents a TFTP read request
+	 * 
+	 * @author Samuel Dewan
+	 */
 	public static class RRQ extends TFTPPacket {
 		/*
 		 *  2 bytes     string    1 byte     string   1 byte
@@ -166,12 +210,24 @@ public abstract class TFTPPacket {
 		 */
 		private TFTPMode mode;
 		
+		/**
+		 * Create a read request
+		 * 
+		 * @param filename Name of the file to be requested
+		 * @param mode TFTP mode for the request
+		 */
 		public RRQ (String filename, TFTPMode mode)
 		{
 			this.filename = filename;
 			this.mode = mode;
 		}
 		
+		/**
+		 * Create a read request from received data
+		 * 
+		 * @param bytes The received packet
+		 * @throws IllegalArgumentException
+		 */
 		public RRQ (byte[] bytes) throws IllegalArgumentException
 		{
 			if (bytes.length < 4) {
@@ -209,22 +265,26 @@ public abstract class TFTPPacket {
 			this.mode = TFTPMode.parseFromString(mode);
 		}
 		
+		/**
+		 * Get the filename for this request
+		 * 
+		 * @return The filename for this request
+		 */
 		public String getFilename()
 		{
 			return filename;
 		}
 
-
+		/**
+		 * Get the TFTP mode for this request
+		 * 
+		 * @return The TFTP mode for this request
+		 */
 		public TFTPMode getMode()
 		{
 			return mode;
 		}
-		
-		/**
-		 * Marshal the packet to the format to be transmitted on a network.
-		 * 
-		 * @return A byte array containing the marshaled packet
-		 */
+	
 		@Override
 		public byte[] toBytes()
 		{
@@ -269,12 +329,23 @@ public abstract class TFTPPacket {
 		 */
 		private TFTPMode mode;
 		
+		/**
+		 * Create a write request.
+		 * @param filename The name of the file to be written
+		 * @param mode The TFTP mode for the transfer
+		 */
 		public WRQ (String filename, TFTPMode mode)
 		{
 			this.filename = filename;
 			this.mode = mode;
 		}
 		
+		/**
+		 * Create a write request from received data.
+		 * 
+		 * @param bytes The received packet
+		 * @throws IllegalArgumentException
+		 */
 		public WRQ (byte[] bytes) throws IllegalArgumentException
 		{
 			if (bytes.length < 4) {
@@ -313,22 +384,26 @@ public abstract class TFTPPacket {
 			this.mode = TFTPMode.parseFromString(mode);
 		}
 		
+		/**
+		 * Get the filename for this request
+		 * 
+		 * @return The filename for this request
+		 */
 		public String getFilename()
 		{
 			return filename;
 		}
 
-
+		/**
+		 * Get the TFTP mode for this request
+		 * 
+		 * @return The TFTP mode for this request
+		 */
 		public TFTPMode getMode()
 		{
 			return mode;
 		}
 		
-		/**
-		 * Marshal the packet to the format to be transmitted on a network.
-		 * 
-		 * @return A byte array containing the marshaled packet
-		 */
 		@Override
 		public byte[] toBytes()
 		{
@@ -381,6 +456,12 @@ public abstract class TFTPPacket {
 		 */
 		private byte[] data;
 	
+		/**
+		 * Create a data packet.
+		 * @param blockNum The block number for this data
+		 * @param data The data to be sent
+		 * @throws IllegalArgumentException
+		 */
 		public DATA (int blockNum, byte[] data) throws IllegalArgumentException
 		{
 			if (blockNum > TFTPPacket.MAX_BLOCK_NUM) {
@@ -393,6 +474,12 @@ public abstract class TFTPPacket {
 			this.data = data;
 		}
 		
+		/**
+		 * Create a data packet from received data.
+		 * 
+		 * @param bytes The received packet
+		 * @throws IllegalArgumentException
+		 */
 		public DATA (byte[] bytes) throws IllegalArgumentException 
 		{
 			if (bytes.length < 4) {
@@ -411,21 +498,24 @@ public abstract class TFTPPacket {
 			}
 		}
 		
+		/**
+		 * Get the block number for this data packet.
+		 * 
+		 * @return The block number of the data packet
+		 */
 		public int getBlockNum() {
 			return blockNum;
 		}
 
+		/**
+		 * Get the data from this data packet.
+		 * 
+		 * @return The data contained in the data packet
+		 */
 		public byte[] getData() {
 			return data;
 		}
 		
-		/* Method for getting the length of the data packet when creating a datagramPacket? or a method to create a datagramPacket -MM0515*/
-
-		/**
-		 * Marshal the packet to the format to be transmitted on a network.
-		 * 
-		 * @return A byte array containing the marshaled packet
-		 */
 		@Override
 		public byte[] toBytes()
 		{
@@ -464,10 +554,16 @@ public abstract class TFTPPacket {
 		 */
 		
 		/**
-		 * Block number for this ack
+		 * Block number for this ACK
 		 */
 		private int blockNum;
 		
+		/**
+		 * Create an ACK packet
+		 * 
+		 * @param blockNum The block number to be acknowledged 
+		 * @throws IllegalArgumentException
+		 */
 		public ACK (int blockNum) throws IllegalArgumentException
 		{
 			if (blockNum > TFTPPacket.MAX_BLOCK_NUM) {
@@ -477,6 +573,12 @@ public abstract class TFTPPacket {
 			this.blockNum = blockNum & 0xFFFF;
 		}
 		
+		/**
+		 * Create an ACK packet from received data.
+		 * 
+		 * @param bytes The received packet
+		 * @throws IllegalArgumentException
+		 */
 		public ACK (byte[] bytes) throws IllegalArgumentException 
 		{
 			if (bytes.length != 4) {
@@ -490,15 +592,15 @@ public abstract class TFTPPacket {
 			this.blockNum = ((int)bytes[3]) | (((int)bytes[2]) << 8);
 		}
 
+		/**
+		 * Get the block number for this ACK.
+		 * 
+		 * @return The block number of the ACK packet
+		 */
 		public int getBlockNum() {
 			return blockNum;
 		}
 
-		/**
-		 * Marshal the packet to the format to be transmitted on a network.
-		 * 
-		 * @return A byte array containing the marshaled packet
-		 */
 		@Override
 		public byte[] toBytes()
 		{
@@ -542,12 +644,24 @@ public abstract class TFTPPacket {
 		 */
 		private String description;
 		
+		/**
+		 * Create and error packet.
+		 * 
+		 * @param error The error code for this packet
+		 * @param description A description of the error
+		 */
 		public ERROR  (TFTPError error, String description)
 		{
 			this.error = error;
 			this.description = description;
 		}
 		
+		/**
+		 * Create an error packet from received data.
+		 * 
+		 * @param bytes The received packet
+		 * @throws IllegalArgumentException
+		 */
 		public ERROR (byte[] bytes) throws IllegalArgumentException 
 		{
 			if (bytes.length < 5) {
@@ -573,19 +687,24 @@ public abstract class TFTPPacket {
 					StandardCharsets.UTF_8);
 		}
 
+		/**
+		 * Get the error code for this packet.
+		 * 
+		 * @return The error code
+		 */
 		public TFTPError getError() {
 			return error;
 		}
 
+		/**
+		 * Get the human readable description for this error.
+		 * 
+		 * @return The description of this error
+		 */
 		public String getDescription() {
 			return description;
 		}
 
-		/**
-		 * Marshal the packet to the format to be transmitted on a network.
-		 * 
-		 * @return A byte array containing the marshaled packet
-		 */
 		@Override
 		public byte[] toBytes()
 		{
