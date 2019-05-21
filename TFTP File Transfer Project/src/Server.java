@@ -393,7 +393,6 @@ class WriteHandler extends RequestHandler implements Runnable {
 		    
 			// Check Packet for correctness
 	    	try {
-	    		int length = receivePacket.getLength();
 				dataPacket = new TFTPPacket.DATA(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 			} catch (IllegalArgumentException e) {
 				System.err.println("Incorrect Response. Reason: Expected Data.");
@@ -448,6 +447,15 @@ class WriteHandler extends RequestHandler implements Runnable {
     			System.exit(1);
 	    	}
 		}
+		
+		try {
+			fos.flush();
+			fos.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
 		// All data received and writes performed and last ack sent
 		if(this.verbose) {
 			System.out.println("Write Request complete! Closing socket.");
