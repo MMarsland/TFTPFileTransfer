@@ -1,3 +1,4 @@
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
@@ -232,7 +233,8 @@ public abstract class TFTPPacket {
 		{
 			if (bytes.length < 4) {
 				throw new IllegalArgumentException("Read request is too short");
-			} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) != 1) {
+			} else if (ByteBuffer.wrap(
+					new byte[] {0, 0, bytes[0], bytes[1]}).getInt() != 1) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for read request");
 			}
@@ -351,7 +353,8 @@ public abstract class TFTPPacket {
 			if (bytes.length < 4) {
 				throw new IllegalArgumentException(
 						"Write request is too short");
-			} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) != 2) {
+			} else if (ByteBuffer.wrap(
+					new byte[] {0, 0, bytes[0], bytes[1]}).getInt() != 2) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for write request");
 			}
@@ -484,12 +487,14 @@ public abstract class TFTPPacket {
 		{
 			if (bytes.length < 4) {
 				throw new IllegalArgumentException("Data packet is too short");
-			} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) != 3) {
+			} else if (ByteBuffer.wrap(
+					new byte[] {0, 0, bytes[0], bytes[1]}).getInt() != 3) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for data packet");
 			}
 			
-			this.blockNum = ((int)bytes[3]) | (((int)bytes[2]) << 8);
+			this.blockNum = ByteBuffer.wrap(
+					new byte[] {0, 0, bytes[2], bytes[3]}).getInt();
 			
 			if (bytes.length > 4) {
 				this.data = Arrays.copyOfRange(bytes, 4, bytes.length);
@@ -580,16 +585,18 @@ public abstract class TFTPPacket {
 		 * @throws IllegalArgumentException
 		 */
 		public ACK (byte[] bytes) throws IllegalArgumentException 
-		{
+		{	
 			if (bytes.length != 4) {
 				throw new IllegalArgumentException(
 						"Invalid length for ACK packet");
-			} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) != 4) {
+			} else if (ByteBuffer.wrap(
+					new byte[] {0, 0, bytes[0], bytes[1]}).getInt() != 4) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for ACK packet");
 			}
 			
-			this.blockNum = ((int)bytes[3]) | (((int)bytes[2]) << 8);
+			this.blockNum = ByteBuffer.wrap(
+					new byte[] {0, 0, bytes[2], bytes[3]}).getInt();
 		}
 
 		/**
@@ -663,15 +670,17 @@ public abstract class TFTPPacket {
 		 * @throws IllegalArgumentException
 		 */
 		public ERROR (byte[] bytes) throws IllegalArgumentException 
-		{
+		{	
 			if (bytes.length < 5) {
 				throw new IllegalArgumentException("Error packet is too short");
-			} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) != 5) {
+			} else if (ByteBuffer.wrap(
+					new byte[] {0, 0, bytes[0], bytes[1]}).getInt() != 5) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for error packet");
 			}
 			
-			int code = ((int)bytes[3]) | (((int)bytes[2]) << 8);
+			int code = ByteBuffer.wrap(
+					new byte[] {0, 0, bytes[2], bytes[3]}).getInt();
 			this.error = TFTPError.fromCode(code);
 
 			// Find end of string
