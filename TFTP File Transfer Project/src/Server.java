@@ -1,8 +1,6 @@
-import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -91,7 +89,7 @@ class ServerListener implements Runnable {
 	    }
 	}
 	
-	public void kill()
+	public void close()
 	{
 	    receiveSocket.close();
 	}
@@ -444,13 +442,8 @@ public class Server {
 					System.out.println("Error: Too many parameters.");
 				}
 				else {
-					listener.kill();
-					/*try {
-						listenerThread.join();
-					} catch (InterruptedException e) {
-						e.printStackTrace();
-					}*/
 					System.out.println("Server Shutting Down...");
+					listener.close();
 					in.close();
 					System.exit(0);
 				}
