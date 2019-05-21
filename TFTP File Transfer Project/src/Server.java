@@ -39,10 +39,6 @@ class ServerListener implements Runnable {
 		this.listenerPort = listenerPort;
 		this.verbose = verbose;
 		
-		if(verbose) {
-			System.out.println("Setting up receive socket on port " + this.listenerPort);
-		}
-		
 		// Set up the socket that will be used to receive packets from clients (or error simulators)
 		try { 
 			receiveSocket = new DatagramSocket(listenerPort);
@@ -69,7 +65,7 @@ class ServerListener implements Runnable {
 	    
 	    while(!Thread.interrupted()) {
 	    	if(verbose) {
-	    		System.out.println("Waiting for packet from client on port "+this.listenerPort+"...");
+	    		System.out.println("Listening for packets on port "+this.listenerPort+"...");
 	    	}
 	    	
 	    	// Wait for a packet to come in from the client.
@@ -84,7 +80,7 @@ class ServerListener implements Runnable {
 	    	}
 	    
 	    	if(verbose) {
-	    		System.out.println("Creating a response handler for this connection");
+	    		System.out.println("New Request Received:");
 	    	}
 	    	
 	    	// Parse the packet to determine the type of handler required
@@ -98,21 +94,25 @@ class ServerListener implements Runnable {
 	    	// Create a handler thread
 			if (request instanceof TFTPPacket.RRQ) {
 				if (!verbose) {
-					System.out.println("Received a Read Request.");
+					System.out.println("Received a read request.");
+				} else {
+					System.out.println("Creating a read handler for this request.");
 				}
 				ReadHandler handler = new ReadHandler(receivePacket, (TFTPPacket.RRQ) request, verbose);
 				Thread handlerThread = new Thread(handler);
 				handlerThread.start();
 	    	} else if (request instanceof TFTPPacket.WRQ) {
 	    		if (!verbose) {
-					System.out.println("Received a Write Request.");
+					System.out.println("Received a write request.");
+				} else {
+					System.out.println("Creating a write handler for this request.");
 				}
 	    		WriteHandler handler = new WriteHandler(receivePacket, (TFTPPacket.WRQ) request, verbose);
 				Thread handlerThread = new Thread(handler);
 				handlerThread.start();
 	    	} else {
 	    		// Not the right first request type..
-	    		System.err.println("Unexpected first request packet... Not Read or Write!");
+	    		System.err.println("Unexpected first request packet. Reason: Not Read or Write");
 	    		throw new IllegalArgumentException();
 	    	}
 			
@@ -165,7 +165,7 @@ class ReadHandler extends RequestHandler implements Runnable {
 	 */
 	public ReadHandler(DatagramPacket receivePacket, TFTPPacket.RRQ request, boolean verbose) {
 		if(verbose) {
-			System.out.println("Setting up Read Handler");
+			System.out.println("Setting up read handler.");
 		}
 		this.receivePacket = receivePacket;
 		this.request = request;
@@ -189,7 +189,7 @@ class ReadHandler extends RequestHandler implements Runnable {
 	 */
 	public void run(){
 		if(this.verbose) {
-			System.out.println("Handling Read Request");
+			System.out.println("Handling read request.");
 		}
 	    
 		FileInputStream fis = null;
@@ -200,7 +200,7 @@ class ReadHandler extends RequestHandler implements Runnable {
 			System.exit(0);
 		} 
 		if(this.verbose) {
-			System.out.println("File Successfully Opened! filename: "+this.filename);
+			System.out.println("Successfully opened: "+this.filename);
 		}
 		
 		TFTPPacket.DATA dataPacket;
@@ -213,9 +213,6 @@ class ReadHandler extends RequestHandler implements Runnable {
 			// Read data from file into data packet
 		    this.blockNum++;
 		    this.blockNum = this.blockNum & 0xFFFF;
-		    if(this.verbose) {
-				System.out.println("Reading Block Number #"+blockNum);
-			}
 		    try {
 		    	if ((len=fis.read(data,0,512)) < 512) {
 		    		moreToRead = false;
@@ -232,21 +229,18 @@ class ReadHandler extends RequestHandler implements Runnable {
 				System.exit(0);
 			}
 		    
-		    if(this.verbose) {
-				System.out.println("Block #"+blockNum+" has "+len+" data bytes!");
-			}
-		    
 			// Assemble data packet
 		    dataPacket = new TFTPPacket.DATA(this.blockNum, data);
 		    sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, clientAddress, clientTID);
 		    
-		    if(this.verbose) {
-				System.out.println("Data Packet Successfully Assembled");
-			}
-		    
 		    // Send data packet to client on Client TID
 		    if(this.verbose) {
-				System.out.println("Sending Data Packet");
+				System.out.println("Sending Packet:");
+				System.out.println("Packet Type: RRQ");
+				System.out.println("Filename: "+this.filename);
+				// Mode not Applicable
+				System.out.println("Block Number: "+this.blockNum);
+				System.out.println("# of Bytes: "+len);
 			}
 		    
 		    try {
@@ -257,7 +251,7 @@ class ReadHandler extends RequestHandler implements Runnable {
 	    	}
 			// Wait for ACK
 		    if(this.verbose) {
-				System.out.println("Waiting for ack packet");
+				System.out.println("Waiting for ack packet...");
 			}
 		    
 		    // New Receive total bytes
@@ -269,39 +263,34 @@ class ReadHandler extends RequestHandler implements Runnable {
 	    		e.printStackTrace();
     			System.exit(1);
 	    	}
-		    
-		    if(this.verbose) {
-				System.out.println("Recieved packet from client");
-			}
-		    
+		    		    
 		    // Parse ACK for correctness
 		    TFTPPacket.ACK ackPacket = null;
 	    	try {
 				ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 			} catch (IllegalArgumentException e) {
-				System.err.println("Not a ack ackPacket to data! :((((");
+				System.err.println("Wrong Packet Recieved. Reason: Not an ackPacket");
 				e.printStackTrace();
 				System.exit(0);
 			}
 	    	if (ackPacket.getBlockNum() == this.blockNum ) {
 				// Correct acks
-				if(this.verbose) {
-					System.out.println("Recieved ack for block #"+((TFTPPacket.ACK) ackPacket).getBlockNum());
-				}
 			} else {
 				// Incorrect ack
-				System.err.println("Wrong ACK response. Incorrect block number");
+				System.err.println("Wrong ACK response. Reason: Incorrect block number");
 	    		throw new IllegalArgumentException();
 			}
 	    	
-			// If more data, or exactly 0 send more packets
-			// Wait for ACK
-			// ...
-			
-			if(this.verbose && moreToRead) {
-				System.out.println("Sending Next Data Block: ");
+	    	if(this.verbose) {
+				System.out.println("Received Packet:");
+				System.out.println("Packet Type: ACK");
+				// N/A System.out.println("Filename: "+this.filename);
+				// N/A System.out.println("Mode: "+this.Mode);
+				System.out.println("Block Number: "+this.blockNum);
+				// N/A System.out.println("# of Bytes: "+len);
 			}
-			
+	    	
+	    	//Continue...
 		}
 		// All data is sent and last ACK received,
 		// Close socket, quit
@@ -393,10 +382,6 @@ class WriteHandler extends RequestHandler implements Runnable {
 		boolean moreToWrite = true;
 		while (moreToWrite) {
 			// Receive Data Packet
-			 if(this.verbose) {
-				System.out.println("Waiting for data packet");
-			}
-		    
 		    data = new byte[TFTPPacket.MAX_SIZE];
 		    receivePacket = new DatagramPacket(data, data.length);
 		    try {
@@ -405,18 +390,13 @@ class WriteHandler extends RequestHandler implements Runnable {
 	    		e.printStackTrace();
     			System.exit(1);
 	    	}
-		    if(this.verbose) {
-				System.out.println("Recieved data packet from client");
-			}
-			// Check Packet for correctness
 		    
+			// Check Packet for correctness
 	    	try {
 	    		int length = receivePacket.getLength();
-	    		System.out.println("The receive packet has length: "+length);
-	    		System.out.println("And looks like this: "+receivePacket.getData()[0]+", "+receivePacket.getData()[1]+", "+receivePacket.getData()[2]+", "+receivePacket.getData()[3]+", "+receivePacket.getData()[4]);
 				dataPacket = new TFTPPacket.DATA(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 			} catch (IllegalArgumentException e) {
-				System.err.println("Not a data response to ack! :((((");
+				System.err.println("Incorrect Response. Reason: Expected Data.");
 				e.printStackTrace();
 				System.exit(0);
 			}
@@ -428,14 +408,21 @@ class WriteHandler extends RequestHandler implements Runnable {
 		    if (len < 512) {
 		    	moreToWrite = false;
 		    }
+
 		    if(this.verbose) {
-				System.out.println("Data block #"+blockNum+" has "+len+" bytes!");
+				System.out.println("Received Packet:");
+				System.out.println("Packet Type: DATA");
+				System.out.println("Filename: "+this.filename);
+				System.out.println("Mode: "+this.mode);
+				System.out.println("Block Number: "+blockNum);
+				System.out.println("# of Bytes: "+len);
 			}
+		    
 			// Write into file
 		    try {
 				fos.write(dataPacket.getData(),0,dataPacket.getData().length);
 			} catch (IOException e) {
-				System.err.println("Failed to write data to file!");
+				System.err.println("Failed to write data to file.");
 				e.printStackTrace();
 				System.exit(0);
 			}
@@ -444,13 +431,14 @@ class WriteHandler extends RequestHandler implements Runnable {
 		    ackPacket = new TFTPPacket.ACK(blockNum);
 		    sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, clientAddress, clientTID);
 		    
-		    if(this.verbose) {
-				System.out.println("Ack Packet Successfully Assembled");
-			}
-		    
 		    // Send ack packet to client on Client TID
 		    if(this.verbose) {
-				System.out.println("Sending ack Packet");
+				System.out.println("Sending Packet:");
+				System.out.println("Packet Type: ACK");
+				// N/A System.out.println("Filename: "+this.filename);
+				// N/A System.out.println("Mode: "+this.Mode);
+				System.out.println("Block Number: "+blockNum);
+				// N/A System.out.println("# of Bytes: "+len);
 			}
 		    
 		    try {
@@ -459,10 +447,6 @@ class WriteHandler extends RequestHandler implements Runnable {
 	    		e.printStackTrace();
     			System.exit(1);
 	    	}
-		    
-		    if(this.verbose && moreToWrite) {
-				System.out.println("Waiting for Next Data Block:");
-			}
 		}
 		// All data received and writes performed and last ack sent
 		if(this.verbose) {
