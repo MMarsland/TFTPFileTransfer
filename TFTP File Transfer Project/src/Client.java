@@ -398,41 +398,7 @@ public class Client {
 				System.exit(1);
 			}
 			
-			System.out.println("Request sent.  Waiting for response from server...");
-			
-			byte data[] = new byte[TFTPPacket.MAX_SIZE];
-		    DatagramPacket receivePacket = new DatagramPacket(data, data.length);
-		    try {
-	    		sendReceiveSocket.receive(receivePacket);
-	    	} catch(IOException e) {
-	    		e.printStackTrace();
-    			System.exit(1);
-	    	}
-		    
-		    if(verbose) {
-				System.out.println("Recieved packet from server.");
-			}
-		    
-		    // Parse ACK for correctness
-		    TFTPPacket.ACK ackPacket = null;
-	    	try {
-				ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
-			} catch (IllegalArgumentException e) {
-				System.out.println("Not an ACK Packet! :((((");
-				e.printStackTrace();
-				System.exit(0);
-			}
-	    	if (ackPacket.getBlockNum() == 0 ) {
-				// Correct acks
-				if(verbose) {
-					System.out.println("Recieved ACK for block #0.  Starting data transfer...");
-					replyPort = receivePacket.getPort();
-				}
-			} else {
-				// Incorrect ack
-				System.out.println("Wrong ACK response. Incorrect block number");
-	    		throw new IllegalArgumentException();
-			}
+			System.out.println("Request sent.");
 	    	
 			filename = source;
 			
