@@ -21,7 +21,7 @@ public class Client {
 	 */
 	private static DatagramSocket sendReceiveSocket;
 	private static InetAddress serverAddress;
-	private static int serverPort;
+	private static int serverPort, replyPort;
 	private static boolean verbose;
 	private static String filename;
 	
@@ -104,8 +104,9 @@ public class Client {
 				System.exit(0);
 			}
 			// Definitely data :)
-			// Strip block number
+			// Strip block number & port
 			blockNum = dataPacket.getBlockNum();
+			replyPort = receivePacket.getPort();
 			// Check size? Less than 512 == done
 			len = dataPacket.getData().length;
 			if (len < 512) {
@@ -126,7 +127,7 @@ public class Client {
 			
 			// Send Acknowledgement packet with block number
 			ackPacket = new TFTPPacket.ACK(blockNum);
-			sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, serverAddress, serverPort);
+			sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, serverAddress, replyPort);
 			
 			if(verbose) {
 				System.out.println("Ack Packet Successfully Assembled");
@@ -215,7 +216,7 @@ public class Client {
 		    
 			// Assemble data packet
 		    dataPacket = new TFTPPacket.DATA(blockNum, data);
-		    sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, serverAddress, serverPort);
+		    sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, serverAddress, replyPort);
 		    
 		    if(verbose) {
 				System.out.println("Data Packet Successfully Assembled");
@@ -296,7 +297,7 @@ public class Client {
 		 * The IP of the server is take
 		 */
 		DatagramPacket sendPacket = null;
-		
+		replyPort = serverPort;
 		
 		/*
 		 * Checking which file (source or dest) is on the server to determine the type of
@@ -305,9 +306,10 @@ public class Client {
 		 * building the packet bytes
 		 */
 		if(source.contains(":")) {		//Create and send a read request
-			int index = source.indexOf(":");
-			String addressString = source.substring(0, index);
-			String filepath = source.substring(index);
+			String split[] = dest.split(":");
+			String addressString = split[0];
+			String filepath = split[1];
+			
 			try {
 				serverAddress = InetAddress.getByName(addressString);
 			} catch(UnknownHostException e) {
@@ -335,9 +337,10 @@ public class Client {
 			
 			
 		} else if(dest.contains(":")) {		//Create and send a write request
-			int index = dest.indexOf(":");
-			String addressString = dest.substring(0, index);
-			String filepath = dest.substring(index);
+			String split[] = dest.split(":");
+			String addressString = split[0];
+			String filepath = split[1];
+			
 			try {
 				serverAddress = InetAddress.getByName(addressString);
 			} catch(UnknownHostException e) {
@@ -385,6 +388,7 @@ public class Client {
 				// Correct acks
 				if(verbose) {
 					System.out.println("Recieved ack for block #0.  Starting data transfer...");
+					replyPort = receivePacket.getPort();
 				}
 			} else {
 				// Incorrect ack
@@ -448,6 +452,7 @@ public class Client {
 		        verbose = true;
 		    } else {
 		    	System.out.println("Verbose?");
+		    	System.out.print(">> ");
 				command = in.nextLine();
 				split = command.split("\\s+");
 				if(split[0].toLowerCase().equals("shutdown")) {
@@ -467,6 +472,7 @@ public class Client {
 		        serverPort = Integer.parseInt(line.getOptionValue("sp"));
 		    } else {
 		    	System.out.println("Enter the server port number");
+		    	System.out.print(">> ");
 		    	command = in.nextLine();
 		    	split = command.split("\\s+");
 		    	if(split[0].toLowerCase().equals("shutdown")) {
@@ -492,6 +498,7 @@ public class Client {
 			System.out.println("Enter a command in the format: sourceFilePath destinationFilePath");
 			System.out.println("For RRQ, sourceFilePath should be the server file.  For WRQ, destinationFilePath should be the server file.");
 			System.out.println("Enter 'shutdown' to close client.");
+			System.out.print(">> ");
 			command = in.nextLine();
 			split = command.split("\\s+");
 			
@@ -531,6 +538,7 @@ public class Client {
 			System.out.println("For RRQ, sourceFilePath should be the server file.  For WRQ, destinationFilePath "
 									+ "should be the server file.");
 			System.out.println("Enter 'shutdown' to close client.");
+			System.out.print(">> ");
 			command = in.nextLine();
 			split = command.split("\\s+");
 			
@@ -549,6 +557,7 @@ public class Client {
 			
 			if(verbose == false) {
 				System.out.println("Verbose?");
+				System.out.print(">> ");
 				command = in.nextLine();
 				if(command.toLowerCase().equals("y") || command.toLowerCase().equals("yes")) {
 					verbose = true;
