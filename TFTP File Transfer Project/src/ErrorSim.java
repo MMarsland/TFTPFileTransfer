@@ -8,6 +8,7 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.util.Arrays;
 import java.util.Scanner;
 import org.apache.commons.cli.*;
 
@@ -91,7 +92,7 @@ class ErrorSimListener implements Runnable {
 	    		clientSocket.receive(receivePacket);
 	    	} catch(IOException e) {
 	    		if(e.getMessage().equals("socket closed")){
-	    			System.exit(0);
+	    			return;
 	    		}
 	    		e.printStackTrace();
     			System.exit(1);
@@ -102,7 +103,12 @@ class ErrorSimListener implements Runnable {
 	    	clientTID = receivePacket.getPort();
 	    
 	    	if(verbose) {
-	    		System.out.println("Forwarding data to server...");
+	    		System.out.println("Received packet from client.");
+	    	    System.out.println("From address: " + receivePacket.getAddress());
+	    	    System.out.println("From port: " + receivePacket.getPort());
+	    	    System.out.println("Length: " + receivePacket.getLength());
+	    	    TFTPPacket.parse(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength())).print();
+	    	    System.out.print("\n");
 	    	}
 	    	
 	    	if(isRequestRW(receivePacket)){
@@ -124,13 +130,20 @@ class ErrorSimListener implements Runnable {
 	    		sendReceiveSocket.send(sendPacket);
 	    	} catch (IOException e) {
 	    		if(e.getMessage().equals("socket closed")){
-	    			System.exit(0);
+	    			return;
 	    		}
 	    		e.printStackTrace();
     			System.exit(1);
 	    	}
 	    
 	    	if(verbose) {
+	    		System.out.println("Sending packet to server.");
+	    	    System.out.println("To address: " + sendPacket.getAddress());
+	    	    System.out.println("To port: " + sendPacket.getPort());
+	    	    System.out.println("Length: " + sendPacket.getLength());
+	    	    TFTPPacket.parse(Arrays.copyOf(sendPacket.getData(), sendPacket.getLength())).print();
+	    	    System.out.print("\n");
+	    	    
 	    		System.out.println("Waiting for server...");
 	    	}
 	    
@@ -138,7 +151,7 @@ class ErrorSimListener implements Runnable {
 	    		sendReceiveSocket.receive(receivePacket);
 	    	} catch(IOException e) {
 	    		if(e.getMessage().equals("socket closed")){
-	    			System.exit(0);
+	    			return;
 	    		}
 	    		e.printStackTrace();
     			System.exit(1);
@@ -150,17 +163,31 @@ class ErrorSimListener implements Runnable {
 	    	sendPacket = new DatagramPacket(data, receivePacket.getLength(), clientAddress, clientTID);
 	    
 	    	if(verbose) {
-	    		System.out.println("Forwarding data to client...");
+	    		System.out.println("Received packet from server.");
+	    	    System.out.println("From address: " + receivePacket.getAddress());
+	    	    System.out.println("From port: " + receivePacket.getPort());
+	    	    System.out.println("Length: " + receivePacket.getLength());
+	    	    TFTPPacket.parse(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength())).print();
+	    	    System.out.print("\n");
 	    	}
 	    
 	    	try { //Send the packet to the client
 	    		sendReceiveSocket.send(sendPacket);
 	    	} catch (IOException e) {
 	    		if(e.getMessage().equals("socket closed")){
-	    			System.exit(0);
+	    			return;
 	    		}
 	    		e.printStackTrace();
     			System.exit(1);
+	    	}
+	    	
+	    	if(verbose){
+	    		System.out.println("Sending packet to client.");
+	    	    System.out.println("To address: " + sendPacket.getAddress());
+	    	    System.out.println("To port: " + sendPacket.getPort());
+	    	    System.out.println("Length: " + sendPacket.getLength());
+	    	    TFTPPacket.parse(Arrays.copyOf(sendPacket.getData(), sendPacket.getLength())).print();
+	    	    System.out.print("\n");
 	    	}
 	    }
 	}
@@ -324,8 +351,19 @@ public class ErrorSim {
 				}
 				else if(split.length == 2) {
 					int port = Integer.parseInt(split[1]);
+					
 					if(port > 0 && port < 65536) {
 						clientPort = port;
+						listener.close();
+						try {
+							listenerThread.join();
+						} catch (InterruptedException e) {
+							e.printStackTrace();
+						}
+						//Restart the listener
+						listener = new ErrorSimListener(clientPort, serverAddress, serverPort, verbose);
+						listenerThread = new Thread(listener);
+						listenerThread.start();
 					}
 					else {
 						System.out.println("Invalid argument");
@@ -342,8 +380,19 @@ public class ErrorSim {
 				}
 				else if(split.length == 2) {
 					int port = Integer.parseInt(split[1]);
+					
 					if(port > 0 && port < 65536) {
 						serverPort = port;
+						listener.close();
+						try {
+							listenerThread.join();
+						} catch (InterruptedException e) {
+							e.printStackTrace();
+						}
+						//Restart the listener
+						listener = new ErrorSimListener(clientPort, serverAddress, serverPort, verbose);
+						listenerThread = new Thread(listener);
+						listenerThread.start();
 					}
 					else {
 						System.out.println("Invalid argument");
@@ -364,6 +413,16 @@ public class ErrorSim {
 					} catch (UnknownHostException e) {
 						System.out.println("Invalid argument");
 					}
+					listener.close();
+					try {
+						listenerThread.join();
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+					//Restart the listener
+					listener = new ErrorSimListener(clientPort, serverAddress, serverPort, verbose);
+					listenerThread = new Thread(listener);
+					listenerThread.start();
 				}
 			}
 			//Handle the help command
