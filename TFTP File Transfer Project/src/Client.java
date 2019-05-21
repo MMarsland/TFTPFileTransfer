@@ -46,8 +46,8 @@ public class Client {
 	{
 		/**
 		 * Method to read a file from the server.  The Client must already have the
-		 * server address and port #.  Sends the initial WRQ, then runs a loop to
-		 * transfer the data from the server.
+		 * server address and port #.  Runs a loop that waits for a data packet, then
+		 * sends an ack packet back.
 		 */
 		
 		if(verbose) {
@@ -314,6 +314,7 @@ public class Client {
 				e.printStackTrace();
 				System.exit(1);
 			}
+			
 			// Read Request
 			TFTPPacket.RRQ readPacket = new TFTPPacket.RRQ(filepath, TFTPPacket.TFTPMode.NETASCII);
 			sendPacket = new DatagramPacket(readPacket.toBytes(), readPacket.size(), serverAddress, serverPort);
@@ -343,8 +344,9 @@ public class Client {
 				e.printStackTrace();
 				System.exit(1);
 			}
+
 			// Write request
-			TFTPPacket.WRQ writePacket = new TFTPPacket.WRQ(filepath, TFTPPacket.TFTPMode.NETASCII);
+			TFTPPacket.WRQ writePacket = new TFTPPacket.WRQ(filepath, TFTPPacket.TFTPMode.parseFromString("netascii"));
 			sendPacket = new DatagramPacket(writePacket.toBytes(), writePacket.size(), serverAddress, serverPort);
 			
 			System.out.println("Sending write request.");
@@ -357,6 +359,39 @@ public class Client {
 			
 			System.out.println("Request sent.  Waiting for response from server...");
 			
+			byte data[] = new byte[TFTPPacket.MAX_SIZE];
+		    DatagramPacket receivePacket = new DatagramPacket(data, data.length);
+		    try {
+	    		sendReceiveSocket.receive(receivePacket);
+	    	} catch(IOException e) {
+	    		e.printStackTrace();
+    			System.exit(1);
+	    	}
+		    
+		    if(verbose) {
+				System.out.println("Recieved packet from server.");
+			}
+		    
+		    // Parse ACK for correctness
+		    TFTPPacket.ACK ackPacket = null;
+	    	try {
+				ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
+			} catch (IllegalArgumentException e) {
+				System.out.println("Not a ack ackPacket to data! :((((");
+				e.printStackTrace();
+				System.exit(0);
+			}
+	    	if (ackPacket.getBlockNum() == 0 ) {
+				// Correct acks
+				if(verbose) {
+					System.out.println("Recieved ack for block #0.  Starting data transfer...");
+				}
+			} else {
+				// Incorrect ack
+				System.out.println("Wrong ACK response. Incorrect block number");
+	    		throw new IllegalArgumentException();
+			}
+	    	
 			filename = source;
 			
 			write();
