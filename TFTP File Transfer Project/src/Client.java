@@ -153,11 +153,6 @@ public class Client {
 		if(verbose) {
 			System.out.println("File transfer complete!");
 		}
-		// Close socket, quit
-		sendReceiveSocket.close();
-		if (verbose) {
-			System.out.println("Closing Write Handler");
-		}
 		
 	}
 	
@@ -284,7 +279,7 @@ public class Client {
 		// All data is sent and last ACK received,
 		// Close socket, quit
 		if(verbose) {
-			System.out.println("Write request complete!");
+			System.out.println("File transfer complete!");
 		}
 	}
 	
@@ -306,7 +301,7 @@ public class Client {
 		 * building the packet bytes
 		 */
 		if(source.contains(":")) {		//Create and send a read request
-			String split[] = dest.split(":");
+			String split[] = source.split(":");
 			String addressString = split[0];
 			String filepath = split[1];
 			
