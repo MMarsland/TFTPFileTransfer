@@ -547,6 +547,8 @@ public class Client {
 		 */
 		//Currently there is no way to set finished to true, but this might be used in the future.
 		while(!finished) {
+			source = null;
+			dest = null;
 			System.out.print(">> ");
 			command = in.nextLine();
 			split = command.split("\\s+");
@@ -580,9 +582,9 @@ public class Client {
 			if(split.length == 2) {
 				source = split[0];
 				dest = split[1];
+				buildRequest(source, dest);
 			}
 			
-			buildRequest(source, dest);
 		}
 		
 		//Closes the socket once the client has been shut down
