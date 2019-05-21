@@ -155,11 +155,8 @@ public class Client {
 				System.out.println("Waiting for Next DATA Block:");
 			}
 		}
-		// All data received and writes performed and last ack sent
-		if(verbose) {
-			System.out.println("File transfer complete!");
-		}
 		
+		System.out.println("File transfer complete!");
 	}
 	
 	public static void write()
@@ -360,7 +357,7 @@ public class Client {
 			}
 			if(verbose ) {
 				System.out.println("Request sent.  Waiting for response from server...");
-			}
+			} else System.out.println("Request sent.");
 			
 			filename = dest;
 			
@@ -397,8 +394,9 @@ public class Client {
 				e.printStackTrace();
 				System.exit(1);
 			}
-			
-			System.out.println("Request sent.");
+			if(verbose ) {
+				System.out.println("Request sent.  Waiting for response from server...");
+			} else System.out.println("Request sent.");
 	    	
 			filename = source;
 			
