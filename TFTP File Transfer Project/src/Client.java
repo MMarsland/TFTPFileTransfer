@@ -66,7 +66,7 @@ public class Client {
 		if(verbose) {
 			System.out.println("File ready to be written! filename: "+filename);
 		}
-		   
+		
 		byte[] data = new byte[TFTPPacket.MAX_SIZE];
 		DatagramPacket receivePacket;
 		TFTPPacket.DATA dataPacket = null;
@@ -89,7 +89,7 @@ public class Client {
 				System.exit(1);
 			}
 			if(verbose) {
-				System.out.println("Recieved DATA packet from client");
+				System.out.println("Recieved packet from server");
 			}
 			// Check Packet for correctness
 		    
@@ -355,7 +355,7 @@ public class Client {
 			sendPacket = new DatagramPacket(writePacket.toBytes(), writePacket.size(), serverAddress, serverPort);
 			
 			if(verbose) {
-				System.out.println("Sending wRQ.  Reading from file: "+filepath+ " with mode: "+writePacket.getMode().toString());
+				System.out.println("Sending WRQ.  Writing to file: "+filepath+ " with mode: "+writePacket.getMode().toString());
 			}
 			try {
 				sendReceiveSocket.send(sendPacket);
@@ -500,8 +500,6 @@ public class Client {
 		//Sends a prompt to provide filenames if none were given
 		if(split.length < 2) {
 			System.out.println("Enter a command in the format: sourceFilePath destinationFilePath");
-			System.out.println("For RRQ, sourceFilePath should be the server file.  For WRQ, destinationFilePath should be the server file.");
-			System.out.println("Enter 'shutdown' to close client.");
 			System.out.print(">> ");
 			command = in.nextLine();
 			split = command.split("\\s+");
@@ -509,6 +507,10 @@ public class Client {
 			source = split[0];
 			dest = split[1];
 			
+			if(split[0].toLowerCase().equals("help")) {
+				System.out.println("For RRQ, sourceFilePath should be the server file.  For WRQ, destinationFilePath should be the server file.");
+				System.out.println("Enter 'shutdown' to close client.");
+			}
 			if(split[0].toLowerCase().equals("shutdown")) {
 				if(verbose) {
 					System.out.println("Closing socket and scanner, and shutting down server.");
