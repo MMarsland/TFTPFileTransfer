@@ -1,3 +1,7 @@
+/**
+ * The Server for the TFTP client-server project
+ */
+
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -10,6 +14,17 @@ import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.Scanner;
 
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+
+/**
+ * ErrorSimListener class handles incoming communications from the client 
+ * and creates the appropriate handler threads to handle the requests.
+ */
 class ServerListener implements Runnable {
 	private DatagramSocket  receiveSocket;
 	private int listenerPort;
@@ -32,6 +47,17 @@ class ServerListener implements Runnable {
 	    }
 	}
 	
+	/**
+	 * Enable/disables verbose mode on the listener thread
+	 * @param mode true enables verbose mode, false disables it
+	 */
+	public void setVerbose(boolean mode) {
+		verbose = mode;
+	}
+	
+	/**
+	 * The run method required to implement Runnable.
+	 */
 	public void run(){
 		byte data[] = new byte[TFTPPacket.MAX_SIZE];
 	    DatagramPacket receivePacket = new DatagramPacket(data, data.length);
@@ -167,6 +193,10 @@ class ReadHandler extends RequestHandler implements Runnable {
 		    try {
 		    	if ((len=fis.read(data,0,512)) < 512) {
 		    		moreToRead = false;
+		    		if (len == -1) {
+		    			// End of file reached exactly. Send 0 bytes of data.
+		    			len = 0;
+		    		}
 					fis.close();
 		    	}
 		    	// Shrink wrap size based on len
@@ -288,6 +318,7 @@ class WriteHandler extends RequestHandler implements Runnable {
 		
 	}
 
+	
 	public void run(){
 		if(this.verbose) {
 			System.out.println("Handling Write Request");
@@ -414,6 +445,9 @@ public class Server {
 		
 		System.out.println("Starting Server..."); 
 		
+		//Initialize settings to default values
+		Boolean verbose = false;
+		int serverPort = 69;
 		InetAddress localHost = null;
 		try {
 			localHost = InetAddress.getLocalHost();
@@ -422,9 +456,45 @@ public class Server {
 			System.exit(1);
 		}
 		
-		ServerListener listener = new ServerListener(69, true);
+		//Setup command line parser
+		Option verboseOption = new Option( "v", "verbose", false, "print extra debug info" );
+		
+		Option serverPortOption = Option.builder("sp").argName("server port")
+                .hasArg()
+                .desc("the port number of the servers listener")
+                .type(Integer.TYPE)
+                .build();
+		
+		Options options = new Options();
+
+		options.addOption(verboseOption);
+		options.addOption(serverPortOption);
+		
+		CommandLineParser parser = new DefaultParser();
+	    try {
+	        // parse the command line arguments
+	        CommandLine line = parser.parse( options, args );
+	        
+	        if( line.hasOption("verbose")) {
+		        verbose = true;
+		    }
+	        
+	        if( line.hasOption("sp")) {
+		        serverPort = Integer.parseInt(line.getOptionValue("sp"));
+		    }
+	    }
+	    catch( ParseException exp ) {
+	        System.err.println( "Command line argument parsing failed.  Reason: " + exp.getMessage() );
+	        System.exit(1);
+	    }
+		
+		ServerListener listener = new ServerListener(serverPort, verbose);
 		Thread listenerThread = new Thread(listener);
 		listenerThread.start();
+		
+		if(verbose) {
+			System.out.println("Listening to client on port " + serverPort);
+		}
 	
 		Scanner in = new Scanner(System.in);
 		String command;
@@ -447,6 +517,47 @@ public class Server {
 					in.close();
 					System.exit(0);
 				}
+			}
+			//Handle the verbose command
+			else if(split[0].toLowerCase().equals("verbose")) {
+				if(split.length > 1) {
+					System.out.println("Error: Too many parameters.");
+				}
+				else {
+					verbose = true;
+					listener.setVerbose(true);
+					System.out.println("Showing additional information.");
+					
+				}
+			}
+			//Handle the quiet command
+			else if(split[0].toLowerCase().equals("quiet")) {
+				if(split.length > 1) {
+					System.out.println("Error: Too many parameters.");
+				}
+				else {
+					verbose = false;
+					listener.setVerbose(false);
+					System.out.println("Hiding extra information.");
+				}
+			}
+			//Handle the serverport command
+			else if(split[0].toLowerCase().equals("serverport")) {
+				if(split.length > 2) {
+					System.out.println("Error: Too many parameters.");
+				}
+				else if(split.length == 1) {
+					System.out.println("Server port: " + serverPort);
+				}
+			}
+			//Handle the help command
+			else if(split[0].toLowerCase().equals("help")) {
+				System.out.println("The following is a list of commands and thier usage:");
+				System.out.println("shutdown - Closes the Server.");
+				System.out.println("verbose - Makes the server output more detailed information.");
+				System.out.println("quiet - Makes the server output only basic information.");
+				System.out.println("serverport - Outputs the port currently being used to listen to requests");
+				System.out.println("help - Shows help information.");
 			}
 			//Handle commands that do not exist
 			else {
