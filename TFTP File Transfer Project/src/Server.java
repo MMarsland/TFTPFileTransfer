@@ -10,7 +10,6 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
-import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.Scanner;
 
@@ -67,9 +66,6 @@ class ServerListener implements Runnable {
 	public void run(){
 		byte data[] = new byte[TFTPPacket.MAX_SIZE];
 	    DatagramPacket receivePacket = new DatagramPacket(data, data.length);
-	    DatagramPacket sendPacket;
-	    InetAddress clientAddress;
-	    int clientPort;
 	    
 	    while(!Thread.interrupted()) {
 	    	if(verbose) {
@@ -87,9 +83,6 @@ class ServerListener implements Runnable {
     			System.exit(1);
 	    	}
 	    
-	    	// Keep the client address and port number for the response later
-	    	clientAddress = receivePacket.getAddress();
-	    	clientPort = receivePacket.getPort();
 	    	if(verbose) {
 	    		System.out.println("Creating a response handler for this connection");
 	    	}
@@ -212,7 +205,6 @@ class ReadHandler extends RequestHandler implements Runnable {
 		
 		TFTPPacket.DATA dataPacket;
 	    DatagramPacket sendPacket;
-	    DatagramPacket recievePacket;
 	    byte[] data = new byte[512];
 	    int len = 69999; 
 	    
@@ -502,13 +494,6 @@ public class Server {
 		//Initialize settings to default values
 		Boolean verbose = false;
 		int serverPort = 69;
-		InetAddress localHost = null;
-		try {
-			localHost = InetAddress.getLocalHost();
-		} catch (UnknownHostException e) {
-			e.printStackTrace();
-			System.exit(1);
-		}
 		
 		//Setup command line parser
 		Option verboseOption = new Option( "v", "verbose", false, "print extra debug info" );
