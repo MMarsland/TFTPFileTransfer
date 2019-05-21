@@ -89,17 +89,17 @@ public class Client {
 				System.exit(1);
 			}
 			if(verbose) {
-				System.out.println("Recieved data packet from client");
+				System.out.println("Recieved DATA packet from client");
 			}
 			// Check Packet for correctness
 		    
 			try {
 				int length = receivePacket.getLength();
-				System.out.println("The receive packet has length: "+length);
-				System.out.println("And looks like this: "+receivePacket.getData()[0]+", "+receivePacket.getData()[1]+", "+receivePacket.getData()[2]+", "+receivePacket.getData()[3]+", "+receivePacket.getData()[4]);
+				System.out.println("The receive packet has length: "+(length-4));
+				//System.out.println("And looks like this: "+receivePacket.getData()[0]+", "+receivePacket.getData()[1]+", "+receivePacket.getData()[2]+", "+receivePacket.getData()[3]+", "+receivePacket.getData()[4]);
 				dataPacket = new TFTPPacket.DATA(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 			} catch (IllegalArgumentException e) {
-				System.out.println("Not a data response to ack! :((((");
+				System.out.println("Not a DATA response to ack! :((((");
 				e.printStackTrace();
 				System.exit(0);
 			}
@@ -130,12 +130,12 @@ public class Client {
 			sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, serverAddress, replyPort);
 			
 			if(verbose) {
-				System.out.println("Ack Packet Successfully Assembled");
+				System.out.println("ACK Packet Successfully Assembled");
 			}
 			
 			// Send ack packet to server on serverPort
 			if(verbose) {
-				System.out.println("Sending ack Packet");
+				System.out.println("Sending ACK Packet");
 			}
 			
 			try {
@@ -146,7 +146,7 @@ public class Client {
 			}
 			
 			if(verbose && moreToWrite) {
-				System.out.println("Waiting for Next Data Block:");
+				System.out.println("Waiting for Next DATA Block:");
 			}
 		}
 		// All data received and writes performed and last ack sent
@@ -196,9 +196,13 @@ public class Client {
 		    try {
 		    	if ((len=fis.read(data,0,512)) < 512) {
 		    		moreToRead = false;
+		    		if (len == -1) {
+		    			// End of file reached exactly. Send 0 bytes of data.
+		    			len = 0;
+		    		}
 					fis.close();
 		    	}
-		    	// Shrink wrap size based on len
+		    	// Shrink wrap size based on the # of bytes read from the file
 		    	data = Arrays.copyOf(data, len);
 			} catch (IOException e) {
 				e.printStackTrace();
@@ -214,12 +218,12 @@ public class Client {
 		    sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, serverAddress, replyPort);
 		    
 		    if(verbose) {
-				System.out.println("Data Packet Successfully Assembled");
+				System.out.println("DATA Packet Successfully Assembled");
 			}
 		    
 		    // Send data packet to client on Client TID
 		    if(verbose) {
-				System.out.println("Sending Data Packet");
+				System.out.println("Sending DATA Packet");
 			}
 		    
 		    try {
@@ -252,14 +256,14 @@ public class Client {
 	    	try {
 				ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 			} catch (IllegalArgumentException e) {
-				System.out.println("Not a ack ackPacket to data! :((((");
+				System.out.println("Not an ACK packet to data! :((((");
 				e.printStackTrace();
 				System.exit(0);
 			}
 	    	if (ackPacket.getBlockNum() == blockNum ) {
 				// Correct acks
 				if(verbose) {
-					System.out.println("Recieved ack for block #"+((TFTPPacket.ACK) ackPacket).getBlockNum());
+					System.out.println("Recieved ACK packet for block #"+((TFTPPacket.ACK) ackPacket).getBlockNum());
 				}
 			} else {
 				// Incorrect ack
@@ -272,7 +276,7 @@ public class Client {
 			// ...
 			
 			if(verbose && moreToRead) {
-				System.out.println("Sending Next Data Block: ");
+				System.out.println("Sending next DATA block: ");
 			}
 			
 		}
@@ -316,15 +320,18 @@ public class Client {
 			TFTPPacket.RRQ readPacket = new TFTPPacket.RRQ(filepath, TFTPPacket.TFTPMode.NETASCII);
 			sendPacket = new DatagramPacket(readPacket.toBytes(), readPacket.size(), serverAddress, serverPort);
 			
-			System.out.println("Sending read request.");
+			if(verbose) {
+				System.out.println("Sending RRQ.  Reading from file: "+filepath+ " with mode: "+readPacket.getMode().toString());
+			}
 			try {
 				sendReceiveSocket.send(sendPacket);
 			} catch(IOException e) {
 				e.printStackTrace();
 				System.exit(1);
 			}
-			
-			System.out.println("Request sent.  Waiting for response from server...");
+			if(verbose ) {
+				System.out.println("Request sent.  Waiting for response from server...");
+			}
 			
 			filename = dest;
 			
@@ -347,7 +354,9 @@ public class Client {
 			TFTPPacket.WRQ writePacket = new TFTPPacket.WRQ(filepath, TFTPPacket.TFTPMode.parseFromString("netascii"));
 			sendPacket = new DatagramPacket(writePacket.toBytes(), writePacket.size(), serverAddress, serverPort);
 			
-			System.out.println("Sending write request.");
+			if(verbose) {
+				System.out.println("Sending wRQ.  Reading from file: "+filepath+ " with mode: "+writePacket.getMode().toString());
+			}
 			try {
 				sendReceiveSocket.send(sendPacket);
 			} catch(IOException e) {
@@ -375,14 +384,14 @@ public class Client {
 	    	try {
 				ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 			} catch (IllegalArgumentException e) {
-				System.out.println("Not a ack ackPacket to data! :((((");
+				System.out.println("Not an ACK Packet! :((((");
 				e.printStackTrace();
 				System.exit(0);
 			}
 	    	if (ackPacket.getBlockNum() == 0 ) {
 				// Correct acks
 				if(verbose) {
-					System.out.println("Recieved ack for block #0.  Starting data transfer...");
+					System.out.println("Recieved ACK for block #0.  Starting data transfer...");
 					replyPort = receivePacket.getPort();
 				}
 			} else {
