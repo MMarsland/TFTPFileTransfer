@@ -10,17 +10,17 @@ import java.util.Arrays;
 public abstract class TFTPPacket {
 	
 	/**
-	 * Maximum size for received a TFTP packet
+	 * Maximum TFTP block size
 	 */
 	public static final int BLOCK_SIZE = 512;
 	
 	/**
-	 * Maximum size for received a TFTP packet
+	 * Maximum size for a received TFTP packet
 	 */
 	public static final int MAX_SIZE = BLOCK_SIZE + 4;
 	
 	/**
-	 * Maximum size for received a TFTP packet
+	 * Maximum TFTP block number
 	 */
 	public static final int MAX_BLOCK_NUM = 0xFFFF;
 	
