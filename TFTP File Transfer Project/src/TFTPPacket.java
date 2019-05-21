@@ -298,7 +298,7 @@ public abstract class TFTPPacket {
 			data[filenameBytes.length + 2] = 0;
 
 			byte modeBytes[] = mode.toString().getBytes(StandardCharsets.UTF_8);
-			System.arraycopy(modeBytes, 0, data, modeBytes.length + 3,
+			System.arraycopy(modeBytes, 0, data, filenameBytes.length + 3,
 					modeBytes.length);
 			data[data.length - 1] = 0;
 			
@@ -419,7 +419,7 @@ public abstract class TFTPPacket {
 
 			byte modeBytes[] = this.mode.toString().getBytes(
 					StandardCharsets.UTF_8);
-			System.arraycopy(modeBytes, 0, data, modeBytes.length + 3,
+			System.arraycopy(modeBytes, 0, data, filenameBytes.length + 3,
 					modeBytes.length);
 			data[data.length - 1] = 0;
 			
