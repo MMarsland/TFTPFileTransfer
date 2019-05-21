@@ -94,9 +94,6 @@ public class Client {
 			// Check Packet for correctness
 		    
 			try {
-				int length = receivePacket.getLength();
-				System.out.println("The receive packet has length: "+(length-4));
-				//System.out.println("And looks like this: "+receivePacket.getData()[0]+", "+receivePacket.getData()[1]+", "+receivePacket.getData()[2]+", "+receivePacket.getData()[3]+", "+receivePacket.getData()[4]);
 				dataPacket = new TFTPPacket.DATA(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 			} catch (IllegalArgumentException e) {
 				System.out.println("Not a DATA response to ack! :((((");
@@ -113,7 +110,11 @@ public class Client {
 				moreToWrite = false;
 			}
 			if(verbose) {
-				System.out.println("Data block #"+blockNum+" has "+len+" bytes!");
+				System.out.println("Received Packet:");
+				System.out.println("Packet Type: DATA");
+				System.out.println("Filename: "+filename);
+				System.out.println("Block Number: "+blockNum);
+				System.out.println("# of Bytes: "+len);
 			}
 			// Write into file
 			try {
@@ -135,7 +136,12 @@ public class Client {
 			
 			// Send ack packet to server on serverPort
 			if(verbose) {
-				System.out.println("Sending ACK Packet");
+				System.out.println("Sending Packet:");
+				System.out.println("Packet Type: ACK");
+				// N/A System.out.println("Filename: "+this.filename);
+				// N/A System.out.println("Mode: "+this.Mode);
+				System.out.println("Block Number: "+blockNum);
+				// N/A System.out.println("# of Bytes: "+len);
 			}
 			
 			try {
@@ -163,9 +169,6 @@ public class Client {
 		 * address and port #.  Sends the initial WRQ, then runs a loop to transfer the 
 		 * data to the server.
 		 */
-		if(verbose) {
-			System.out.println("Writing to server file");
-		}
 	    
 		FileInputStream fis = null;
 		try {
@@ -175,12 +178,11 @@ public class Client {
 			System.exit(0);
 		} 
 		if(verbose) {
-			System.out.println("File Successfully Opened! filename: "+filename);
+			System.out.println("Successfully opened: "+filename);
 		}
 		
 		TFTPPacket.DATA dataPacket;
-	    DatagramPacket sendPacket;
-	    DatagramPacket receivePacket;
+	    DatagramPacket sendPacket, receivePacket;
 	    byte[] data = new byte[512];
 	    int len = 69999;
 		int blockNum = 0;
@@ -190,9 +192,6 @@ public class Client {
 			// Read data from file into data packet
 		    blockNum++;
 		    blockNum = blockNum & 0xFFFF;
-		    if(verbose) {
-				System.out.println("Reading Block Number #"+blockNum);
-			}
 		    try {
 		    	if ((len=fis.read(data,0,512)) < 512) {
 		    		moreToRead = false;
@@ -209,21 +208,17 @@ public class Client {
 				System.exit(0);
 			}
 		    
-		    if(verbose) {
-				System.out.println("Block #"+blockNum+" has "+len+" data bytes!");
-			}
-		    
 			// Assemble data packet
 		    dataPacket = new TFTPPacket.DATA(blockNum, data);
 		    sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, serverAddress, replyPort);
 		    
 		    if(verbose) {
-				System.out.println("DATA Packet Successfully Assembled");
-			}
-		    
-		    // Send data packet to client on Client TID
-		    if(verbose) {
-				System.out.println("Sending DATA Packet");
+				System.out.println("Sending Packet:");
+				System.out.println("Packet Type: DATA");
+				System.out.println("Filename: "+filename);
+				// Mode not Applicable
+				System.out.println("Block Number: "+blockNum);
+				System.out.println("# of Bytes: "+len);
 			}
 		    
 		    try {
@@ -234,7 +229,7 @@ public class Client {
 	    	}
 			// Wait for ACK
 		    if(verbose) {
-				System.out.println("Waiting for ack packet");
+				System.out.println("Waiting for ACK packet...");
 			}
 		    
 		    // New Receive total bytes
@@ -247,44 +242,36 @@ public class Client {
     			System.exit(1);
 	    	}
 		    
-		    if(verbose) {
-				System.out.println("Recieved packet from server.");
-			}
-		    
-		    // Parse ACK for correctness
+		 // Parse ACK for correctness
 		    TFTPPacket.ACK ackPacket = null;
 	    	try {
 				ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 			} catch (IllegalArgumentException e) {
-				System.out.println("Not an ACK packet to data! :((((");
+				System.err.println("Wrong Packet Recieved. Reason: Not an ackPacket");
 				e.printStackTrace();
 				System.exit(0);
 			}
 	    	if (ackPacket.getBlockNum() == blockNum ) {
 				// Correct acks
-				if(verbose) {
-					System.out.println("Recieved ACK packet for block #"+((TFTPPacket.ACK) ackPacket).getBlockNum());
-				}
 			} else {
 				// Incorrect ack
-				System.out.println("Wrong ACK response. Incorrect block number");
+				System.err.println("Wrong ACK response. Reason: Incorrect block number");
 	    		throw new IllegalArgumentException();
 			}
 	    	
-			// If more data, or exactly 0 send more packets
-			// Wait for ACK
-			// ...
-			
-			if(verbose && moreToRead) {
-				System.out.println("Sending next DATA block: ");
+	    	if(verbose) {
+				System.out.println("Received Packet:");
+				System.out.println("Packet Type: ACK");
+				// N/A System.out.println("Filename: "+this.filename);
+				// N/A System.out.println("Mode: "+this.Mode);
+				System.out.println("Block Number: "+blockNum);
+				// N/A System.out.println("# of Bytes: "+len);
 			}
 			
 		}
 		// All data is sent and last ACK received,
 		// Close socket, quit
-		if(verbose) {
-			System.out.println("File transfer complete!");
-		}
+		System.out.println("File transfer complete!");
 	}
 	
 	public static void buildRequest(String source, String dest)
@@ -321,7 +308,12 @@ public class Client {
 			sendPacket = new DatagramPacket(readPacket.toBytes(), readPacket.size(), serverAddress, serverPort);
 			
 			if(verbose) {
-				System.out.println("Sending RRQ.  Reading from file: "+filepath+ " with mode: "+readPacket.getMode().toString());
+				System.out.println("Sending Packet");
+				System.out.println("Packet Type: RRQ");
+				System.out.println("Filename: "+filepath);
+				System.out.println("Mode: "+readPacket.getMode().toString());
+				// Block Number not Applicable
+				System.out.println("# of Bytes: "+(sendPacket.getData().length-4));
 			}
 			try {
 				sendReceiveSocket.send(sendPacket);
@@ -355,7 +347,12 @@ public class Client {
 			sendPacket = new DatagramPacket(writePacket.toBytes(), writePacket.size(), serverAddress, serverPort);
 			
 			if(verbose) {
-				System.out.println("Sending WRQ.  Writing to file: "+filepath+ " with mode: "+writePacket.getMode().toString());
+				System.out.println("Sending Packet");
+				System.out.println("Packet Type: RRQ");
+				System.out.println("Filename: "+filepath);
+				System.out.println("Mode: "+writePacket.getMode().toString());
+				// Block Number not Applicable
+				System.out.println("# of Bytes: "+(sendPacket.getData().length-4));
 			}
 			try {
 				sendReceiveSocket.send(sendPacket);
