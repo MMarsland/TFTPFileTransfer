@@ -38,6 +38,15 @@ public abstract class TFTPPacket {
 	 */
 	public abstract String toString();
 	
+	/**
+	 * Print the type, parameters and number of bytes for a TFTPPacket
+	 */
+	public void print()
+	{
+		System.out.printf("Packet: %s (%d bytes)\n", this.toString(),
+				this.size());
+	}
+	
 	
 	/**
 	 * Get a packet object from an array of bytes.
