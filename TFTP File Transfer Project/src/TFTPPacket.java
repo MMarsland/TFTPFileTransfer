@@ -24,6 +24,11 @@ public abstract class TFTPPacket {
 	 */
 	public static final int MAX_BLOCK_NUM = 0xFFFF;
 	
+	/**
+	 * TFTP receive timeout in milliseconds
+	 */
+	public static final int TFTP_TIMEOUT = 3000;
+	
 	
 	/**
 	 * Marshal the packet to the format to be transmitted on a network.
