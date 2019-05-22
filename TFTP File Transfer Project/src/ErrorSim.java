@@ -12,6 +12,269 @@ import java.util.Arrays;
 import java.util.Scanner;
 import org.apache.commons.cli.*;
 
+class ErrorSimClientListener implements Runnable {
+	private DatagramSocket knownSocket;
+	private DatagramSocket TIDSocket;
+	private InetAddress clientAddress;
+    private int clientPort;
+    boolean verbose;
+	
+	public ErrorSimClientListener(int port, boolean verbose) {
+		this.verbose = verbose;
+		
+		try { //Set up the socket that will be used to receive packets from client on known port
+			knownSocket = new DatagramSocket(port);
+		} catch (SocketException se) { // Can't create the socket.
+			se.printStackTrace();
+			System.exit(1);
+	    }
+		
+		try { //Set up the socket that will be used to communicate with TID port
+			TIDSocket = new DatagramSocket();
+		} catch (SocketException se) { // Can't create the socket.
+			se.printStackTrace();
+			System.exit(1);
+	    }
+	}
+	
+	/**
+	 * Checks if a DatagramPacket contains a read request or a write request
+	 * @param packet The packet to check
+	 * @return true if the packet is a read or write request, false otherwise
+	 */
+	private boolean isRequestRW(DatagramPacket packet) {
+		byte[] packetData = new byte[packet.getLength()];
+    	System.arraycopy(packet.getData(), 0, packetData, 0, packet.getLength());
+    	TFTPPacket parsedPacket = TFTPPacket.parse(packetData);
+    	
+    	return (parsedPacket instanceof TFTPPacket.WRQ || parsedPacket instanceof TFTPPacket.RRQ);
+	}
+	
+	private synchronized void setClientPort(int port){
+		clientPort = port;
+	}
+	
+	private synchronized void setClientAddress(InetAddress address){
+		clientAddress = address;
+	}
+	
+	private DatagramPacket receiveFromClient(DatagramSocket socket) {
+
+		byte data[] = new byte[TFTPPacket.MAX_SIZE];
+	    DatagramPacket packet = new DatagramPacket(data, data.length);
+	    
+    	try { //Wait for a packet to come in from the client.
+    		socket.receive(packet);
+    	} catch(IOException e) {
+    		if(e.getMessage().equals("socket closed")){
+    			return null;
+    		}
+    		e.printStackTrace();
+			System.exit(1);
+    	}
+    	
+    	if(verbose) {
+    		System.out.println("Received packet from client.");
+    	    System.out.println("From address: " + packet.getAddress());
+    	    System.out.println("From port: " + packet.getPort());
+    	    System.out.println("Length: " + packet.getLength());
+    	    TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
+    	    System.out.print("\n");
+    	}
+    	
+    	return packet;
+	}
+	
+	public synchronized void sendToClient(byte data[], int length) {
+		
+		DatagramPacket packet = new DatagramPacket(data, length, clientAddress, clientPort);
+		
+		if(verbose) {
+    		System.out.println("Sending packet to client.");
+    	    System.out.println("To address: " + packet.getAddress());
+    	    System.out.println("To port: " + packet.getPort());
+    	    System.out.println("Length: " + packet.getLength());
+    	    TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
+    	    System.out.print("\n");
+    	}
+		
+		try { //Send the packet to the client
+    		TIDSocket.send(packet);
+    	} catch (IOException e) {
+    		if(e.getMessage().equals("socket closed")){
+    			return;
+    		}
+    		e.printStackTrace();
+			System.exit(1);
+    	}
+	}
+	
+	public void run() {
+		DatagramSocket clientSocket = knownSocket;
+	    DatagramPacket receivePacket;
+	    
+		while(true) {	
+			receivePacket = receiveFromClient(clientSocket);
+    	
+			if(receivePacket == null) {
+				return;
+			}
+			else{
+				//Keep the client address and port number for the response later
+				setClientAddress(receivePacket.getAddress());
+				setClientPort(receivePacket.getPort());
+			}
+    
+			if(isRequestRW(receivePacket)){
+				//This is the start of communication, use the servers known port
+				//sendPacket = new DatagramPacket(data, receivePacket.getLength(), serverAddress, serverPort);
+				clientSocket = TIDSocket; //listening to client on different port now that transaction has started
+			}
+			else{
+				//Not the start of communication, use the port number for the server thread that handles this transaction
+				//sendPacket = new DatagramPacket(data, receivePacket.getLength(), serverAddress, serverTID);
+    		
+				if(receivePacket.getLength() < 516) {
+					//This packet is the end of a transaction, go back to listening to client on known port
+					clientSocket = knownSocket;
+				}
+			}
+    	
+			//Send packet to the server
+			ErrorSim.serverListener.sendToServer(receivePacket.getData(), receivePacket.getLength());
+		}
+	}
+	
+	/**
+	 * Closes the sockets used by the listener to clean up resources
+	 * and also cause the listener thread to exit
+	 */
+	public void close()
+	{
+		knownSocket.close();
+	    TIDSocket.close();
+	}
+}
+
+class ErrorSimServerListener implements Runnable {
+	private DatagramSocket socket;
+	private InetAddress serverAddress;
+    private int serverPort;
+    private int serverTID;
+    boolean verbose;
+	
+	public ErrorSimServerListener(int port, InetAddress address, boolean verbose) {
+		serverPort = port;
+		serverAddress = address;
+		this.verbose = verbose;
+		
+		try { //Set up the socket that will be used to communicate with the server
+			socket = new DatagramSocket();
+		} catch (SocketException se) { // Can't create the socket.
+			se.printStackTrace();
+			System.exit(1);
+	    }
+	}
+	
+	private synchronized void setServerPort(int port){
+		serverPort = port;
+	}
+	
+	private synchronized void setServerTID(int port){
+		serverTID = port;
+	}
+	
+	private synchronized void setServerAddress(InetAddress address){
+		serverAddress = address;
+	}
+	
+	private DatagramPacket receiveFromServer() {
+
+		byte data[] = new byte[TFTPPacket.MAX_SIZE];
+	    DatagramPacket packet = new DatagramPacket(data, data.length);
+	    
+    	try { //Wait for a packet to come in from the client.
+    		socket.receive(packet);
+    	} catch(IOException e) {
+    		if(e.getMessage().equals("socket closed")){
+    			return null;
+    		}
+    		e.printStackTrace();
+			System.exit(1);
+    	}
+    	
+    	if(verbose) {
+    		System.out.println("Received packet from server.");
+    	    System.out.println("From address: " + packet.getAddress());
+    	    System.out.println("From port: " + packet.getPort());
+    	    System.out.println("Length: " + packet.getLength());
+    	    TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
+    	    System.out.print("\n");
+    	}
+    	
+    	return packet;
+	}
+	
+	public synchronized void sendToServer(byte data[], int length) {
+		
+		DatagramPacket packet;
+		TFTPPacket parsedPacket = TFTPPacket.parse(Arrays.copyOf(data, length));
+		
+		if(parsedPacket instanceof TFTPPacket.WRQ || parsedPacket instanceof TFTPPacket.RRQ) {
+			packet = new DatagramPacket(data, length, serverAddress, serverPort);
+		}
+		else {
+			packet = new DatagramPacket(data, length, serverAddress, serverTID);
+		}
+		
+		if(verbose) {
+    		System.out.println("Sending packet to server.");
+    	    System.out.println("To address: " + packet.getAddress());
+    	    System.out.println("To port: " + packet.getPort());
+    	    System.out.println("Length: " + packet.getLength());
+    	    TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
+    	    System.out.print("\n");
+    	}
+		
+		try { //Send the packet to the client
+    		socket.send(packet);
+    	} catch (IOException e) {
+    		if(e.getMessage().equals("socket closed")){
+    			return;
+    		}
+    		e.printStackTrace();
+			System.exit(1);
+    	}
+	}
+	
+	public void run() {
+	    DatagramPacket receivePacket;
+		
+	    while(true){
+	    	receivePacket = receiveFromServer();
+    	
+	    	if(receivePacket == null) {
+	    		return;
+	    	}
+	    	else {
+	    		setServerTID(receivePacket.getPort());
+	    	}
+    	
+	    	//Send packet to the client
+	    	ErrorSim.clientListener.sendToClient(receivePacket.getData(), receivePacket.getLength());
+	    }
+	}
+	
+	/**
+	 * Closes the sockets used by the listener to clean up resources
+	 * and also cause the listener thread to exit
+	 */
+	public void close()
+	{
+		socket.close();
+	}
+}
+
 /**
  * ErrorSimListener class handles communication between the client and server.
  * It forwards packets from the client to the server an vice versa.
@@ -207,6 +470,8 @@ class ErrorSimListener implements Runnable {
  * ErrorSim class handles the setup of the error simulator and acts as the UI thread.
  */
 public class ErrorSim {
+	static ErrorSimClientListener clientListener;
+	static ErrorSimServerListener serverListener;
 
 	/**
 	 * main function for the error simulator
@@ -288,13 +553,20 @@ public class ErrorSim {
 		
 		if(verbose) {
 			System.out.println("Listening to client on port " + clientPort);
-			System.out.println("Server address: " + serverAddress + " port " + serverPort);
+			System.out.println("Server address: " + serverAddress + " port " + serverPort + "\n");
 		}
 		
 		//Create the listener thread
-		ErrorSimListener listener = new ErrorSimListener(clientPort, serverAddress, serverPort, verbose);
+		clientListener = new ErrorSimClientListener(clientPort, verbose);
+		serverListener = new ErrorSimServerListener(serverPort, serverAddress, verbose);
+		Thread clientListenerThread = new Thread(clientListener);
+		Thread serverListenerThread = new Thread(serverListener);
+		clientListenerThread.start();
+		serverListenerThread.start();
+		
+		ErrorSimListener listener = new ErrorSimListener(60000, serverAddress, 60001, verbose);
 		Thread listenerThread = new Thread(listener);
-		listenerThread.start();
+		//listenerThread.start(); NOT USING THIS THREAD ANYMORE, DEPRECIATED
 		
 		Scanner in = new Scanner(System.in);
 		String command;
