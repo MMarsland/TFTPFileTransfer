@@ -10,7 +10,6 @@ import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.Map;
-import java.util.Scanner;
 import org.apache.commons.cli.*;
 
 class Errors {
