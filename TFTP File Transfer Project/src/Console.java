@@ -134,7 +134,7 @@ public class Console implements Runnable, Closeable {
 				String[] split = line.split(" ");
 
 				// Get the specified command callback
-				CommandCallback command = commands.get(split[0]);
+				CommandCallback command = commands.get(split[0].toLowerCase());
 
 				if (command != null) {
 					// Valid command, run callback
