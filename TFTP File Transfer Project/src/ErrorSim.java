@@ -9,6 +9,7 @@ import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.LinkedList;
+import java.util.Map;
 import java.util.Scanner;
 import org.apache.commons.cli.*;
 
@@ -193,14 +194,16 @@ class ErrorInstruction {
 }
 
 class ErrorSimClientListener implements Runnable {
+	private ErrorSim errorSim;
 	private DatagramSocket knownSocket;
 	private DatagramSocket TIDSocket;
 	private InetAddress clientAddress;
     private int clientPort;
     boolean verbose;
 	
-	public ErrorSimClientListener(int port, boolean verbose) {
+	public ErrorSimClientListener(int port, boolean verbose, ErrorSim errorSim) {
 		this.verbose = verbose;
+		this.errorSim = errorSim;
 		
 		try { //Set up the socket that will be used to receive packets from client on known port
 			knownSocket = new DatagramSocket(port);
@@ -230,6 +233,10 @@ class ErrorSimClientListener implements Runnable {
     	return (parsedPacket instanceof TFTPPacket.WRQ || parsedPacket instanceof TFTPPacket.RRQ);
 	}
 	
+	public synchronized int getClientPort() {
+		return clientPort;
+	}
+	
 	private synchronized void setClientPort(int port){
 		clientPort = port;
 	}
@@ -246,7 +253,7 @@ class ErrorSimClientListener implements Runnable {
     	try { //Wait for a packet to come in from the client.
     		socket.receive(packet);
     	} catch(IOException e) {
-    		if(e.getMessage().equals("socket closed")){
+    		if(e.getMessage().toLowerCase().equals("socket closed")){
     			return null;
     		}
     		e.printStackTrace();
@@ -321,7 +328,7 @@ class ErrorSimClientListener implements Runnable {
 			}
     	
 			//Send packet to the server
-			ErrorSim.serverListener.sendToServer(receivePacket.getData(), receivePacket.getLength());
+			this.errorSim.serverListener.sendToServer(receivePacket.getData(), receivePacket.getLength());
 		}
 	}
 	
@@ -337,16 +344,18 @@ class ErrorSimClientListener implements Runnable {
 }
 
 class ErrorSimServerListener implements Runnable {
+	private ErrorSim errorSim;
 	private DatagramSocket socket;
 	private InetAddress serverAddress;
     private int serverPort;
     private int serverTID;
     boolean verbose;
 	
-	public ErrorSimServerListener(int port, InetAddress address, boolean verbose) {
+	public ErrorSimServerListener(int port, InetAddress address, boolean verbose, ErrorSim errorSim) {
 		serverPort = port;
 		serverAddress = address;
 		this.verbose = verbose;
+		this.errorSim = errorSim;
 		
 		try { //Set up the socket that will be used to communicate with the server
 			socket = new DatagramSocket();
@@ -356,12 +365,20 @@ class ErrorSimServerListener implements Runnable {
 	    }
 	}
 	
+	public synchronized int getServerPort () {
+		return this.serverPort;
+	}
+	
 	private synchronized void setServerPort(int port){
 		serverPort = port;
 	}
 	
 	private synchronized void setServerTID(int port){
 		serverTID = port;
+	}
+	
+	public synchronized InetAddress getServerAddress () {
+		return this.serverAddress;
 	}
 	
 	private synchronized void setServerAddress(InetAddress address){
@@ -376,7 +393,7 @@ class ErrorSimServerListener implements Runnable {
     	try { //Wait for a packet to come in from the client.
     		socket.receive(packet);
     	} catch(IOException e) {
-    		if(e.getMessage().equals("socket closed")){
+    		if(e.getMessage().toLowerCase().equals("socket closed")){
     			return null;
     		}
     		e.printStackTrace();
@@ -441,7 +458,7 @@ class ErrorSimServerListener implements Runnable {
 	    	}
     	
 	    	//Send packet to the client
-	    	ErrorSim.clientListener.sendToClient(receivePacket.getData(), receivePacket.getLength());
+	    	this.errorSim.clientListener.sendToClient(receivePacket.getData(), receivePacket.getLength());
 	    }
 	}
 	
@@ -459,9 +476,262 @@ class ErrorSimServerListener implements Runnable {
  * ErrorSim class handles the setup of the error simulator and acts as the UI thread.
  */
 public class ErrorSim {
-	static ErrorSimClientListener clientListener;
-	static ErrorSimServerListener serverListener;
-	static Errors errors;
+	public ErrorSimClientListener clientListener;
+	public ErrorSimServerListener serverListener;
+	private Errors errors;
+	
+	private Thread clientListenerThread;
+	private Thread serverListenerThread;
+	
+	public ErrorSim (int clientPort, int serverPort, InetAddress serverAddress, boolean verbose) {
+		//Create the errors instance
+		this.errors = new Errors();
+		
+		//Create the listener thread
+		this.clientListener = new ErrorSimClientListener(clientPort, verbose, this);
+		this.serverListener = new ErrorSimServerListener(serverPort, serverAddress, verbose, this);
+		this.clientListenerThread = new Thread(clientListener);
+		this.serverListenerThread = new Thread(serverListener);
+	}
+	
+	public void start () {
+		this.clientListenerThread.start();
+		this.serverListenerThread.start();
+	}
+	
+	private void shutdown (Console c, String[] args) {
+		if(args.length > 1) {
+			c.println("Error: Too many parameters.");
+		} else {
+			clientListener.close();
+			try {
+				clientListenerThread.join();
+			} catch (InterruptedException e) {
+				c.printerr("Error closing client listener thread.");
+				System.exit(1);
+			}
+			serverListener.close();
+			try {
+				serverListenerThread.join();
+			} catch (InterruptedException e) {
+				c.printerr("Error closing server listener thread.");
+				System.exit(1);
+			}
+			try {
+				c.close();
+			} catch (IOException e) {
+				c.printerr("Error closing console thread.");
+				System.exit(1);
+			}
+			System.exit(0);
+		}
+	}
+	
+	private void setVerboseCmd (Console c, String[] args) {
+		if(args.length > 1) {
+			c.println("Error: Too many parameters.");
+		} else {
+			clientListener.verbose = true;
+			serverListener.verbose = true;
+		}
+	}
+	
+	private void setQuietCmd (Console c, String[] args) {
+		if(args.length > 1) {
+			c.println("Error: Too many parameters.");
+		} else {
+			clientListener.verbose = false;
+			serverListener.verbose = false;
+		}
+	}
+	
+	private void setClientPortCmd (Console c, String[] args) {
+		if(args.length > 2) {
+			c.println("Error: Too many parameters.");
+		} else if(args.length == 1) {
+			c.println("Client port: " + this.clientListener.getClientPort());
+		} else if(args.length == 2) {
+			int port = Integer.parseInt(args[1]);
+			
+			if(port > 0 && port < 65536) {
+				boolean verbose = this.clientListener.verbose;
+				
+				this.clientListener.close();
+				try {
+					this.clientListenerThread.join();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				//Restart the listener
+				this.clientListener = new ErrorSimClientListener(port, verbose, this);
+				this.clientListenerThread = new Thread(clientListener);
+				this.clientListenerThread.start();
+			}
+			else {
+				c.println("Invalid argument");
+			}
+		}
+	}
+	
+	private void setServerPortCmd (Console c, String[] args) {
+		if(args.length > 2) {
+			c.println("Error: Too many parameters.");
+		} else if(args.length == 1) {
+			c.println("Server port: " + this.serverListener.getServerPort());
+		} else if(args.length == 2) {
+			int port = Integer.parseInt(args[1]);
+			
+			if(port > 0 && port < 65536) {
+				InetAddress serverAddress = this.serverListener.getServerAddress();
+				boolean verbose = this.clientListener.verbose;
+				
+				serverListener.close();
+				try {
+					serverListenerThread.join();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				//Restart the listener
+				serverListener = new ErrorSimServerListener(port, serverAddress, verbose, this);
+				serverListenerThread = new Thread(serverListener);
+				serverListenerThread.start();
+			}
+			else {
+				c.println("Invalid argument");
+			}
+		}
+	}
+	
+	private void setServerIPCmd (Console c, String[] args) {
+		if(args.length > 2) {
+			c.println("Error: Too many parameters.");
+		} else if(args.length == 1) {
+			c.println("Server ip " + this.serverListener.getServerAddress());
+		} else if(args.length == 2) {
+			try {
+				int serverPort = this.serverListener.getServerPort();
+				boolean verbose = this.serverListener.verbose;
+				
+				InetAddress serverAddress = InetAddress.getByName(args[1]);
+				
+				serverListener.close();
+				serverListenerThread.join();
+				
+				//Restart the listener
+				serverListener = new ErrorSimServerListener(serverPort, serverAddress, verbose, this);
+				serverListenerThread = new Thread(serverListener);
+				serverListenerThread.start();
+			} catch (UnknownHostException e) {
+				c.println("Invalid argument");
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	private void dropCmd (Console c, String[] args) {
+		if(args.length > 4) {
+			c.println("Error: Too many parameters.");
+		} else if(args.length < 4){
+			c.println("Error: Not enough parameters.");
+		} else {
+			if(ErrorInstruction.getPacketType(args[1]) == null) {
+				c.println("Error: Invalid packet type");
+				return;
+			}
+
+			try {
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+						ErrorInstruction.errorTypes.DROP, 	//Error type
+						Integer.parseInt(args[2]),			//Affected packet type
+						0,									//Time delay - not used here
+						Integer.parseInt(args[3])));		//Repeat count
+			}
+			catch(IllegalArgumentException e) {
+				c.println("Error: Invalid argument");
+			}
+		}
+	}
+	
+	private void delayCmd (Console c, String[] args) {
+		if(args.length > 5) {
+			c.println("Error: Too many parameters.");
+		}
+		else if(args.length < 5){
+			c.println("Error: Not enough parameters.");
+		}
+		else {
+			if(ErrorInstruction.getPacketType(args[1]) == null) {
+				c.println("Error: Invalid packet type");
+				return;
+			}
+
+			try {
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+						ErrorInstruction.errorTypes.DELAY, 	//Error type
+						Integer.parseInt(args[2]),			//Affected packet type
+						Integer.parseInt(args[3]),			//Time delay
+						Integer.parseInt(args[4])));		//Repeat count
+			}
+			catch(IllegalArgumentException e) {
+				c.println("Error: Invalid argument");
+			}
+		}
+	}
+	
+	private void duplicateCmd (Console c, String[] args) {
+		if(args.length > 5) {
+			c.println("Error: Too many parameters.");
+		}
+		else if(args.length < 5){
+			c.println("Error: Not enough parameters.");
+		}
+		else {
+			if(ErrorInstruction.getPacketType(args[1]) == null) {
+				c.println("Error: Invalid packet type");
+				return;
+			}
+
+			try {
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+						ErrorInstruction.errorTypes.DUPLICATE, 	//Error type
+						Integer.parseInt(args[2]),			//Affected packet type
+						Integer.parseInt(args[3]),			//Time delay
+						Integer.parseInt(args[4])));		//Repeat count
+			}
+			catch(IllegalArgumentException e) {
+				c.println("Error: Invalid argument");
+			}
+		}
+	}
+	
+	private void errorsCmd (Console c, String[] args) {
+		c.println(errors.toString());
+	}
+	
+	private void helpCmd (Console c, String[] args) {
+		c.println("The following is a list of commands and thier usage:");
+		c.println("shutdown - Closes the error simulator program.");
+		c.println("verbose - Makes the error simulator output more detailed information.");
+		c.println("quiet - Makes the error simulator output only basic information.");
+		c.println("clientport [x] - Outputs the port currently being used to listen to requests "
+				+ "from the client if x is not provided. If parameter x is provided, then the port "
+				+ "is changed to x.");
+		c.println("serverport [x] - Outputs the port currently being used to forward requests "
+				+ "to the server if x is not provided. If parameter x is provided, then the port "
+				+ "is changed to x.");
+		c.println("serverip [x] - Outputs the IP address currently being used to communicate with "
+				+ "the server if x is not provided. If parameter x is provided, then the IP address "
+				+ "is changed to x.");
+		c.println("drop [A B C] - Drops a packet. A = packet type, B = packet number, C = repeat count.");
+		c.println("	Valid packet types are RRQ, WRQ, DATA, ACK, ERROR. Reapeat count < 0 is infinite.");
+		c.println("delay [A B C D] - Delays a packet. A = packet type, B = packet number, C = delay time (ms), D = repeat count.");
+		c.println("	Valid packet types are RRQ, WRQ, DATA, ACK, ERROR. Reapeat count < 0 is infinite.");
+		c.println("duplicate [A B C D] - Duplicates a packet. A = packet type, B = packet number, C = time between packets (ms), D = repeat count.");
+		c.println("	Valid packet types are RRQ, WRQ, DATA, ACK, ERROR. Reapeat count < 0 is infinite.");
+		c.println("help - Shows help information.");
+	}
+	
 
 	/**
 	 * main function for the error simulator
@@ -546,263 +816,28 @@ public class ErrorSim {
 			System.out.println("Server address: " + serverAddress + " port " + serverPort + "\n");
 		}
 		
-		//Create the errors instance
-		errors = new Errors();
+		// Create and start ErrorSim instance
+		ErrorSim errorSim = new ErrorSim (clientPort, serverPort, serverAddress, verbose);
+		errorSim.start();
 		
-		//Create the listener thread
-		clientListener = new ErrorSimClientListener(clientPort, verbose);
-		serverListener = new ErrorSimServerListener(serverPort, serverAddress, verbose);
-		Thread clientListenerThread = new Thread(clientListener);
-		Thread serverListenerThread = new Thread(serverListener);
-		clientListenerThread.start();
-		serverListenerThread.start();
+		// Create and start console UI thread
+		Map<String, Console.CommandCallback> commands = Map.ofEntries(
+				Map.entry("shutdown", errorSim::shutdown),
+				Map.entry("verbose", errorSim::setVerboseCmd),
+				Map.entry("quite", errorSim::setQuietCmd),
+				Map.entry("clientport", errorSim::setClientPortCmd),
+				Map.entry("serverport", errorSim::setServerPortCmd),
+				Map.entry("serverip", errorSim::setServerIPCmd),
+				Map.entry("drop", errorSim::dropCmd),
+				Map.entry("delay", errorSim::delayCmd),
+				Map.entry("duplicate", errorSim::duplicateCmd),
+				Map.entry("errors", errorSim::errorsCmd),
+				Map.entry("help", errorSim::helpCmd)
+				);
 		
-		Scanner in = new Scanner(System.in);
-		String command;
-		String[] split;
+		Console console = new Console(commands);
 		
-		//This is the UI thread. It handles commands from the user
-		while(true) {
-			command = in.nextLine();
-			split = command.split("\\s+");
-			
-			//Handle the shutdown command
-			if(split[0].toLowerCase().equals("shutdown")) {
-				if(split.length > 1) {
-					System.out.println("Error: Too many parameters.");
-				}
-				else {
-					clientListener.close();
-					try {
-						clientListenerThread.join();
-					} catch (InterruptedException e) {
-						e.printStackTrace();
-					}
-					serverListener.close();
-					try {
-						serverListenerThread.join();
-					} catch (InterruptedException e) {
-						e.printStackTrace();
-					}
-					in.close();
-					System.exit(0);
-				}
-			}
-			//Handle the verbose command
-			else if(split[0].toLowerCase().equals("verbose")) {
-				if(split.length > 1) {
-					System.out.println("Error: Too many parameters.");
-				}
-				else {
-					verbose = true;
-					clientListener.verbose = true;
-					serverListener.verbose = true;
-				}
-			}
-			//Handle the quiet command
-			else if(split[0].toLowerCase().equals("quiet")) {
-				if(split.length > 1) {
-					System.out.println("Error: Too many parameters.");
-				}
-				else {
-					verbose = false;
-					clientListener.verbose = false;
-					serverListener.verbose = false;
-				}
-			}
-			//Handle the clientport command
-			else if(split[0].toLowerCase().equals("clientport")) {
-				if(split.length > 2) {
-					System.out.println("Error: Too many parameters.");
-				}
-				else if(split.length == 1) {
-					System.out.println("Client port: " + clientPort);
-				}
-				else if(split.length == 2) {
-					int port = Integer.parseInt(split[1]);
-					
-					if(port > 0 && port < 65536) {
-						clientPort = port;
-						clientListener.close();
-						try {
-							clientListenerThread.join();
-						} catch (InterruptedException e) {
-							e.printStackTrace();
-						}
-						//Restart the listener
-						clientListener = new ErrorSimClientListener(clientPort, verbose);
-						clientListenerThread = new Thread(clientListener);
-						clientListenerThread.start();
-					}
-					else {
-						System.out.println("Invalid argument");
-					}
-				}
-			}
-			//Handle the serverport command
-			else if(split[0].toLowerCase().equals("serverport")) {
-				if(split.length > 2) {
-					System.out.println("Error: Too many parameters.");
-				}
-				else if(split.length == 1) {
-					System.out.println("Server port: " + serverPort);
-				}
-				else if(split.length == 2) {
-					int port = Integer.parseInt(split[1]);
-					
-					if(port > 0 && port < 65536) {
-						serverPort = port;
-						serverListener.close();
-						try {
-							serverListenerThread.join();
-						} catch (InterruptedException e) {
-							e.printStackTrace();
-						}
-						//Restart the listener
-						serverListener = new ErrorSimServerListener(serverPort, serverAddress, verbose);
-						serverListenerThread = new Thread(serverListener);
-						serverListenerThread.start();
-					}
-					else {
-						System.out.println("Invalid argument");
-					}
-				}
-			}
-			//Handle the serverip command
-			else if(split[0].toLowerCase().equals("serverip")) {
-				if(split.length > 2) {
-					System.out.println("Error: Too many parameters.");
-				}
-				else if(split.length == 1) {
-					System.out.println("Server ip " + serverAddress);
-				}
-				else if(split.length == 2) {
-					try {
-						serverAddress = InetAddress.getByName(split[1]);
-					} catch (UnknownHostException e) {
-						System.out.println("Invalid argument");
-					}
-					serverListener.close();
-					try {
-						serverListenerThread.join();
-					} catch (InterruptedException e) {
-						e.printStackTrace();
-					}
-					//Restart the listener
-					serverListener = new ErrorSimServerListener(serverPort, serverAddress, verbose);
-					serverListenerThread = new Thread(serverListener);
-					serverListenerThread.start();
-				}
-			}
-			//Handle the drop command
-			else if(split[0].toLowerCase().equals("drop")) {
-				if(split.length > 4) {
-					System.out.println("Error: Too many parameters.");
-				}
-				else if(split.length < 4){
-					System.out.println("Error: Not enough parameters.");
-				}
-				else {
-					if(ErrorInstruction.getPacketType(split[1]) == null) {
-						System.out.println("Error: Invalid packet type");
-						break;
-					}
-
-					try {
-						errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(split[1]), 
-								ErrorInstruction.errorTypes.DROP, 	//Error type
-								Integer.parseInt(split[2]),			//Affected packet type
-								0,									//Time delay - not used here
-								Integer.parseInt(split[3])));		//Repeat count
-					}
-					catch(IllegalArgumentException e) {
-						System.out.println("Error: Invalid argument");
-					}
-				}
-			}
-			//Handle the delay command
-			else if(split[0].toLowerCase().equals("delay")) {
-				if(split.length > 5) {
-					System.out.println("Error: Too many parameters.");
-				}
-				else if(split.length < 5){
-					System.out.println("Error: Not enough parameters.");
-				}
-				else {
-					if(ErrorInstruction.getPacketType(split[1]) == null) {
-						System.out.println("Error: Invalid packet type");
-						break;
-					}
-
-					try {
-						errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(split[1]), 
-								ErrorInstruction.errorTypes.DELAY, 	//Error type
-								Integer.parseInt(split[2]),			//Affected packet type
-								Integer.parseInt(split[3]),			//Time delay
-								Integer.parseInt(split[4])));		//Repeat count
-					}
-					catch(IllegalArgumentException e) {
-						System.out.println("Error: Invalid argument");
-					}
-				}
-			}
-			//Handle the duplicate command
-			else if(split[0].toLowerCase().equals("duplicate")) {
-				if(split.length > 5) {
-					System.out.println("Error: Too many parameters.");
-				}
-				else if(split.length < 5){
-					System.out.println("Error: Not enough parameters.");
-				}
-				else {
-					if(ErrorInstruction.getPacketType(split[1]) == null) {
-						System.out.println("Error: Invalid packet type");
-						break;
-					}
-
-					try {
-						errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(split[1]), 
-								ErrorInstruction.errorTypes.DUPLICATE, 	//Error type
-								Integer.parseInt(split[2]),			//Affected packet type
-								Integer.parseInt(split[3]),			//Time delay
-								Integer.parseInt(split[4])));		//Repeat count
-					}
-					catch(IllegalArgumentException e) {
-						System.out.println("Error: Invalid argument");
-					}
-				}
-			}
-			//Handle the duplicate command
-			else if(split[0].toLowerCase().equals("errors")) {
-				System.out.println(errors);
-			}
-			//Handle the help command
-			else if(split[0].toLowerCase().equals("help")) {
-				System.out.println("The following is a list of commands and thier usage:");
-				System.out.println("shutdown - Closes the error simulator program.");
-				System.out.println("verbose - Makes the error simulator output more detailed information.");
-				System.out.println("quiet - Makes the error simulator output only basic information.");
-				System.out.println("clientport [x] - Outputs the port currently being used to listen to requests "
-						+ "from the client if x is not provided. If parameter x is provided, then the port "
-						+ "is changed to x.");
-				System.out.println("serverport [x] - Outputs the port currently being used to forward requests "
-						+ "to the server if x is not provided. If parameter x is provided, then the port "
-						+ "is changed to x.");
-				System.out.println("serverip [x] - Outputs the IP address currently being used to communicate with "
-						+ "the server if x is not provided. If parameter x is provided, then the IP address "
-						+ "is changed to x.");
-				System.out.println("drop [A B C] - Drops a packet. A = packet type, B = packet number, C = repeat count.");
-				System.out.println("	Valid packet types are RRQ, WRQ, DATA, ACK, ERROR. Reapeat count < 0 is infinite.");
-				System.out.println("delay [A B C D] - Delays a packet. A = packet type, B = packet number, C = delay time (ms), D = repeat count.");
-				System.out.println("	Valid packet types are RRQ, WRQ, DATA, ACK, ERROR. Reapeat count < 0 is infinite.");
-				System.out.println("duplicate [A B C D] - Duplicates a packet. A = packet type, B = packet number, C = time between packets (ms), D = repeat count.");
-				System.out.println("	Valid packet types are RRQ, WRQ, DATA, ACK, ERROR. Reapeat count < 0 is infinite.");
-				System.out.println("help - Shows help information.");
-			}
-			//Handle commands that do not exist
-			else {
-				System.out.println("Invalid command.");
-			}
-		}
+		Thread consoleThread = new Thread(console);
+		consoleThread.start();
 	}
 }
