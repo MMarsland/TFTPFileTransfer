@@ -115,6 +115,7 @@ public class Console implements Runnable, Closeable {
 	public void printerr(String str)
 	{
 		this.errorWriter.println(str);
+		this.errorWriter.flush();
 	}
 
 	@Override
