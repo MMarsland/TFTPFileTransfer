@@ -824,7 +824,7 @@ public class ErrorSim {
 		Map<String, Console.CommandCallback> commands = Map.ofEntries(
 				Map.entry("shutdown", errorSim::shutdown),
 				Map.entry("verbose", errorSim::setVerboseCmd),
-				Map.entry("quite", errorSim::setQuietCmd),
+				Map.entry("quiet", errorSim::setQuietCmd),
 				Map.entry("clientport", errorSim::setClientPortCmd),
 				Map.entry("serverport", errorSim::setServerPortCmd),
 				Map.entry("serverip", errorSim::setServerIPCmd),
