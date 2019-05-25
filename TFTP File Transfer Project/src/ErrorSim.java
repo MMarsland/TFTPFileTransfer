@@ -10,13 +10,14 @@ import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.Map;
-import java.util.Scanner;
+import java.util.Timer;
+import java.util.TimerTask;
 import org.apache.commons.cli.*;
 
 class Errors {
 	private LinkedList<ErrorInstruction> errors = new LinkedList<ErrorInstruction>();
 	
-	public boolean add(ErrorInstruction error) {
+	public synchronized boolean add(ErrorInstruction error) {
 		
 		//Don't allow adding duplicate commands
 		for(ErrorInstruction ei : errors) {
@@ -29,11 +30,84 @@ class Errors {
 		return true;
 	}
 	
-	public boolean remove(ErrorInstruction error) {
+	public synchronized boolean remove(ErrorInstruction error) {
 		return errors.remove(error);
 	}
 	
-	public ErrorInstruction isPacketAffected(DatagramPacket packet) {
+	public synchronized ErrorInstruction checkPacket(DatagramPacket packet) {
+		if(errors.size() == 0) {
+			return null;
+		}
+		
+		TFTPPacket parsedPacket = TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength()));
+		
+		int i;
+		for(i = 0; i < errors.size(); i++) {
+			ErrorInstruction ei = errors.get(i);
+			
+			if(ei.packetType == ErrorInstruction.packetTypes.RRQ && parsedPacket instanceof TFTPPacket.RRQ) {
+				if(ei.skipped == ei.packetNumber) {
+					ei.occurances++;
+					if(ei.occurances == ei.timesToPerform) {
+						errors.remove(i);
+					}else {
+						ei.skipped = 0;
+					}
+					return ei;
+				}
+				ei.skipped++;
+			}
+			else if(ei.packetType == ErrorInstruction.packetTypes.WRQ && parsedPacket instanceof TFTPPacket.WRQ) {
+				if(ei.skipped == ei.packetNumber) {
+					ei.occurances++;
+					if(ei.occurances == ei.timesToPerform) {
+						errors.remove(i);
+					}else {
+						ei.skipped = 0;
+					}
+					return ei;
+				}
+				ei.skipped++;
+			}
+			else if(ei.packetType == ErrorInstruction.packetTypes.DATA && parsedPacket instanceof TFTPPacket.DATA) {
+				TFTPPacket.DATA data = (TFTPPacket.DATA)parsedPacket; 
+				if(data.getBlockNum() == ei.packetNumber) {
+					ei.occurances++;
+					if(ei.occurances == ei.timesToPerform) {
+						errors.remove(i);
+					}else {
+						ei.skipped = 0;
+					}
+					return ei;
+				}
+				ei.skipped++;
+			}
+			else if(ei.packetType == ErrorInstruction.packetTypes.ACK && parsedPacket instanceof TFTPPacket.ACK) {
+				TFTPPacket.ACK ack = (TFTPPacket.ACK)parsedPacket; 
+				if(ack.getBlockNum() == ei.packetNumber) {
+					ei.occurances++;
+					if(ei.occurances == ei.timesToPerform) {
+						errors.remove(i);
+					}else {
+						ei.skipped = 0;
+					}
+					return ei;
+				}
+				ei.skipped++;
+			}
+			else if(ei.packetType == ErrorInstruction.packetTypes.ERROR && parsedPacket instanceof TFTPPacket.ERROR) {
+				if(ei.skipped == ei.packetNumber) {
+					ei.occurances++;
+					if(ei.occurances == ei.timesToPerform) {
+						errors.remove(i);
+					}else {
+						ei.skipped = 0;
+					}
+					return ei;
+				}
+				ei.skipped++;
+			}
+		}
 		return null;
 	}
 	
@@ -68,10 +142,11 @@ class ErrorInstruction {
 	errorTypes errorType;
 	int packetNumber;
 	int delay;
-	int repeat;
-	int repeatCount;
+	int timesToPerform;
+	int occurances;
+	int skipped = 0;
 	
-	ErrorInstruction(packetTypes packetType, errorTypes errorType, int packetNumber, int delay, int repeat)
+	ErrorInstruction(packetTypes packetType, errorTypes errorType, int packetNumber, int delay, int timesToPerform)
 	{
 		if(packetNumber < 0) {
 			throw new IllegalArgumentException("packet number can't be less than 0");
@@ -79,15 +154,25 @@ class ErrorInstruction {
 		if(delay < 0) {
 			throw new IllegalArgumentException("delay can't be less than 0");
 		}
-		if(repeat < -1 ) {
-			throw new IllegalArgumentException("repeat can't be less than -1");
+		if(timesToPerform == 0 ) {
+			throw new IllegalArgumentException("cant perform error 0 times");
 		}
 		
 		this.packetType = packetType;
 		this.errorType = errorType;
 		this.packetNumber = packetNumber;
 		this.delay = delay;
-		this.repeat = repeat;
+		this.timesToPerform = timesToPerform;
+	}
+	
+	ErrorInstruction(ErrorInstruction ei){
+		this.packetType = ei.packetType;
+		this.errorType = ei.errorType;
+		this.packetNumber = ei.packetNumber;
+		this.delay = ei.delay;
+		this.timesToPerform = ei.timesToPerform;
+		this.occurances = ei.occurances;
+		this.skipped = ei.skipped;
 	}
 	
 	public boolean equals(Object o) {
@@ -107,8 +192,8 @@ class ErrorInstruction {
 		}
 		return this.packetNumber == error.packetNumber &&
 				this.delay == error.delay &&
-				this.repeat == error.repeat &&
-				this.repeatCount == error.repeatCount;
+				this.timesToPerform == error.timesToPerform &&
+				this.occurances == error.occurances;
 	}
 	
 	public String toString() {
@@ -147,17 +232,17 @@ class ErrorInstruction {
 		desc += packetNumber;
 		
 		if(errorType == errorTypes.DELAY) {
-			desc += " by " + delay + "ms ";
+			desc += " by " + delay + " ms";
 		}
 		else if(errorType == errorTypes.DUPLICATE) {
-			desc += " with" + delay + "ms between packets ";
+			desc += " with " + delay + " ms between packets";
 		}
 		
-		if(repeat < 0) {
+		if(timesToPerform < 0) {
 			desc += ". Repeat indefinitley.";
 		}
 		else {
-			desc += ". Repeat " + repeat + " times, " + (repeat - repeatCount) + " remaining.";
+			desc += ". Perform " + timesToPerform + " time(s), " + (timesToPerform - occurances) + " remaining.";
 		}
 		return desc;
 	}
@@ -193,15 +278,21 @@ class ErrorInstruction {
 	}
 }
 
-class ErrorSimClientListener implements Runnable {
+class ErrorSimClientListener{
 	private ErrorSim errorSim;
 	private DatagramSocket knownSocket;
 	private DatagramSocket TIDSocket;
 	private InetAddress clientAddress;
     private int clientPort;
     boolean verbose;
+    Timer timer;
+    SocketListener knownPortListener;
+    SocketListener TIDPortListener;
+    Thread knownPortListenerThread;
+    Thread TIDPortListenerThread;
 	
 	public ErrorSimClientListener(int port, boolean verbose, ErrorSim errorSim) {
+		this.clientPort = port;
 		this.verbose = verbose;
 		this.errorSim = errorSim;
 		
@@ -218,23 +309,64 @@ class ErrorSimClientListener implements Runnable {
 			se.printStackTrace();
 			System.exit(1);
 	    }
+		
+		timer = new Timer();
+		knownPortListener = new SocketListener(knownSocket);
+		TIDPortListener = new SocketListener(TIDSocket);
+		knownPortListenerThread = new Thread(knownPortListener);
+		TIDPortListenerThread = new Thread(TIDPortListener);
 	}
 	
-	/**
-	 * Checks if a DatagramPacket contains a read request or a write request
-	 * @param packet The packet to check
-	 * @return true if the packet is a read or write request, false otherwise
-	 */
-	private boolean isRequestRW(DatagramPacket packet) {
-		byte[] packetData = new byte[packet.getLength()];
-    	System.arraycopy(packet.getData(), 0, packetData, 0, packet.getLength());
-    	TFTPPacket parsedPacket = TFTPPacket.parse(packetData);
-    	
-    	return (parsedPacket instanceof TFTPPacket.WRQ || parsedPacket instanceof TFTPPacket.RRQ);
+	public synchronized void sendToClient(DatagramPacket packet) {
+		ErrorInstruction ei = errorSim.errors.checkPacket(packet);
+		if(ei != null) {
+			System.out.println("Applying the following error before sending packet to client:");
+			System.out.println(ei);
+		
+			if(ei.errorType == ErrorInstruction.errorTypes.DUPLICATE) {
+				//Send the packet now, and its duplicate later
+				timer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), 0);
+				timer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), ei.delay);
+			}
+			else if(ei.errorType == ErrorInstruction.errorTypes.DELAY) {
+				//Send the packet later
+				timer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), ei.delay);
+			}
+		}
+		else {
+			//Send the packet to the client without introducing any errors
+			timer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), 0);
+		}
+	}
+
+	public void start() {
+		knownPortListenerThread.start();
+		TIDPortListenerThread.start();
 	}
 	
-	public synchronized int getClientPort() {
+	public int getClientKnownPort() {
 		return clientPort;
+	}
+	
+	public synchronized void setClientKnownPort(int port) {
+		knownSocket.close();
+		clientPort = port;
+		try { //Set up the socket that will be used to receive packets from client on known port
+			knownSocket = new DatagramSocket(port);
+		} catch (SocketException se) { // Can't create the socket.
+			se.printStackTrace();
+			System.exit(1);
+	    }
+		
+		knownPortListener = new SocketListener(knownSocket);
+		knownPortListenerThread = new Thread(knownPortListener);
+		knownPortListenerThread.start();
+	}
+	
+	public void close()
+	{
+		knownSocket.close();
+	    TIDSocket.close();
 	}
 	
 	private synchronized void setClientPort(int port){
@@ -272,74 +404,62 @@ class ErrorSimClientListener implements Runnable {
     	return packet;
 	}
 	
-	public synchronized void sendToClient(byte data[], int length) {
+	private class SocketListener implements Runnable{
+		private DatagramSocket socket;
 		
-		DatagramPacket packet = new DatagramPacket(data, length, clientAddress, clientPort);
+		public SocketListener(DatagramSocket socket) {
+			this.socket = socket;
+		}
 		
-		if(verbose) {
-    		System.out.println("Sending packet to client.");
-    	    System.out.println("To address: " + packet.getAddress());
-    	    System.out.println("To port: " + packet.getPort());
-    	    System.out.println("Length: " + packet.getLength());
-    	    TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
-    	    System.out.print("\n");
-    	}
-		
-		try { //Send the packet to the client
-    		TIDSocket.send(packet);
-    	} catch (IOException e) {
-    		if(e.getMessage().equals("socket closed")){
-    			return;
-    		}
-    		e.printStackTrace();
-			System.exit(1);
-    	}
-	}
-	
-	public void run() {
-		DatagramSocket clientSocket = knownSocket;
-	    DatagramPacket receivePacket;
-	    
-		while(true) {	
-			receivePacket = receiveFromClient(clientSocket);
-    	
-			if(receivePacket == null) {
-				return;
-			}
-			else{
-				//Keep the client address and port number for the response later
-				setClientAddress(receivePacket.getAddress());
-				setClientPort(receivePacket.getPort());
-			}
-    
-			if(isRequestRW(receivePacket)){
-				//This is the start of communication, use the servers known port
-				//sendPacket = new DatagramPacket(data, receivePacket.getLength(), serverAddress, serverPort);
-				clientSocket = TIDSocket; //listening to client on different port now that transaction has started
-			}
-			else{
-				//Not the start of communication, use the port number for the server thread that handles this transaction
-				//sendPacket = new DatagramPacket(data, receivePacket.getLength(), serverAddress, serverTID);
-    		
-				if(receivePacket.getLength() < 516) {
-					//This packet is the end of a transaction, go back to listening to client on known port
-					clientSocket = knownSocket;
+		public void run() {
+			DatagramPacket receivePacket;
+		    
+			while(true) {	
+				receivePacket = receiveFromClient(socket);
+	    	
+				if(receivePacket == null) {
+					return;
 				}
+				setClientAddress(receivePacket.getAddress());
+				setClientPort(receivePacket.getPort());	
+				errorSim.serverListener.sendToServer(receivePacket);
 			}
-    	
-			//Send packet to the server
-			this.errorSim.serverListener.sendToServer(receivePacket.getData(), receivePacket.getLength());
 		}
 	}
-	
-	/**
-	 * Closes the sockets used by the listener to clean up resources
-	 * and also cause the listener thread to exit
-	 */
-	public void close()
-	{
-		knownSocket.close();
-	    TIDSocket.close();
+
+	private class DelayedSendToClient extends TimerTask{
+		byte data[];
+		int length;
+
+		public DelayedSendToClient(byte data[], int length) {
+			this.data = data;
+			this.length = length;
+		}
+		
+		public synchronized void run() {
+			
+			DatagramPacket packet = new DatagramPacket(data, length, clientAddress, clientPort);
+			
+			if(verbose) {
+	    		System.out.println("Sending packet to client.");
+	    	    System.out.println("To address: " + packet.getAddress());
+	    	    System.out.println("To port: " + packet.getPort());
+	    	    System.out.println("Length: " + packet.getLength());
+	    	    TFTPPacket.parse(Arrays.copyOf(data, length)).print();
+	    	    System.out.print("\n");
+	    	}
+			
+			try { //Send the packet to the client
+	    		TIDSocket.send(packet);
+	    	} catch (IOException e) {
+	    		if(e.getMessage().equals("socket closed")){
+	    			return;
+	    		}
+	    		e.printStackTrace();
+				System.exit(1);
+	    	}
+			this.cancel();
+		}	
 	}
 }
 
@@ -350,6 +470,7 @@ class ErrorSimServerListener implements Runnable {
     private int serverPort;
     private int serverTID;
     boolean verbose;
+    Timer timer;
 	
 	public ErrorSimServerListener(int port, InetAddress address, boolean verbose, ErrorSim errorSim) {
 		serverPort = port;
@@ -363,26 +484,63 @@ class ErrorSimServerListener implements Runnable {
 			se.printStackTrace();
 			System.exit(1);
 	    }
+		
+		timer = new Timer();
 	}
 	
-	public synchronized int getServerPort () {
-		return this.serverPort;
+	public synchronized void sendToServer(DatagramPacket packet) {
+		ErrorInstruction ei = errorSim.errors.checkPacket(packet);
+		if(ei != null) {
+			System.out.println("Applying the following error before sending packet to server:");
+			System.out.println(ei);
+		
+			if(ei.errorType == ErrorInstruction.errorTypes.DUPLICATE) {
+				//Send the packet now, and its duplicate later
+				timer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), 0);
+				timer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), ei.delay);
+			}
+			else if(ei.errorType == ErrorInstruction.errorTypes.DELAY) {
+				//Send the packet later
+				timer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), ei.delay);
+			}
+		}
+		else {
+			//Send the packet to the client without introducing any errors
+			timer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), 0);
+		}
 	}
 	
-	private synchronized void setServerPort(int port){
-		serverPort = port;
+	public int getServerKnownPort() {
+		return serverPort;
+	}
+	
+	public InetAddress getServerAddress() {
+		return serverAddress;
+	}
+	
+	public void close()
+	{
+		socket.close();
+	}
+
+	public void run() {
+	    DatagramPacket receivePacket;
+		
+	    while(true){
+	    	receivePacket = receiveFromServer();
+    	
+	    	if(receivePacket == null) {
+	    		return;
+	    	}
+	    	else {
+	    		setServerTID(receivePacket.getPort());
+	    	}
+	    	errorSim.clientListener.sendToClient(receivePacket);
+	    }
 	}
 	
 	private synchronized void setServerTID(int port){
 		serverTID = port;
-	}
-	
-	public synchronized InetAddress getServerAddress () {
-		return this.serverAddress;
-	}
-	
-	private synchronized void setServerAddress(InetAddress address){
-		serverAddress = address;
 	}
 	
 	private DatagramPacket receiveFromServer() {
@@ -412,63 +570,46 @@ class ErrorSimServerListener implements Runnable {
     	return packet;
 	}
 	
-	public synchronized void sendToServer(byte data[], int length) {
-		
-		DatagramPacket packet;
-		TFTPPacket parsedPacket = TFTPPacket.parse(Arrays.copyOf(data, length));
-		
-		if(parsedPacket instanceof TFTPPacket.WRQ || parsedPacket instanceof TFTPPacket.RRQ) {
-			packet = new DatagramPacket(data, length, serverAddress, serverPort);
-		}
-		else {
-			packet = new DatagramPacket(data, length, serverAddress, serverTID);
+	private class DelayedSendToServer extends TimerTask{
+		byte data[];
+		int length;
+
+		public DelayedSendToServer(byte data[], int length) {
+			this.data = data;
+			this.length = length;
 		}
 		
-		if(verbose) {
-    		System.out.println("Sending packet to server.");
-    	    System.out.println("To address: " + packet.getAddress());
-    	    System.out.println("To port: " + packet.getPort());
-    	    System.out.println("Length: " + packet.getLength());
-    	    TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
-    	    System.out.print("\n");
-    	}
-		
-		try { //Send the packet to the client
-    		socket.send(packet);
-    	} catch (IOException e) {
-    		if(e.getMessage().equals("socket closed")){
-    			return;
-    		}
-    		e.printStackTrace();
-			System.exit(1);
-    	}
-	}
-	
-	public void run() {
-	    DatagramPacket receivePacket;
-		
-	    while(true){
-	    	receivePacket = receiveFromServer();
-    	
-	    	if(receivePacket == null) {
-	    		return;
+		public synchronized void run() {
+			DatagramPacket packet;
+			TFTPPacket parsedPacket = TFTPPacket.parse(Arrays.copyOf(data, length));
+			
+			if(parsedPacket instanceof TFTPPacket.WRQ || parsedPacket instanceof TFTPPacket.RRQ) {
+				packet = new DatagramPacket(data, length, serverAddress, serverPort);
+			}
+			else {
+				packet = new DatagramPacket(data, length, serverAddress, serverTID);
+			}
+			
+			if(verbose) {
+	    		System.out.println("Sending packet to server.");
+	    	    System.out.println("To address: " + packet.getAddress());
+	    	    System.out.println("To port: " + packet.getPort());
+	    	    System.out.println("Length: " + packet.getLength());
+	    	    TFTPPacket.parse(Arrays.copyOf(data, length)).print();
+	    	    System.out.print("\n");
 	    	}
-	    	else {
-	    		setServerTID(receivePacket.getPort());
+			
+			try { //Send the packet to the client
+	    		socket.send(packet);
+	    	} catch (IOException e) {
+	    		if(e.getMessage().equals("socket closed")){
+	    			return;
+	    		}
+	    		e.printStackTrace();
+				System.exit(1);
 	    	}
-    	
-	    	//Send packet to the client
-	    	this.errorSim.clientListener.sendToClient(receivePacket.getData(), receivePacket.getLength());
-	    }
-	}
-	
-	/**
-	 * Closes the sockets used by the listener to clean up resources
-	 * and also cause the listener thread to exit
-	 */
-	public void close()
-	{
-		socket.close();
+			this.cancel();
+		}	
 	}
 }
 
@@ -478,25 +619,22 @@ class ErrorSimServerListener implements Runnable {
 public class ErrorSim {
 	public ErrorSimClientListener clientListener;
 	public ErrorSimServerListener serverListener;
-	private Errors errors;
-	
-	private Thread clientListenerThread;
 	private Thread serverListenerThread;
+	public Errors errors;
 	
 	public ErrorSim (int clientPort, int serverPort, InetAddress serverAddress, boolean verbose) {
 		//Create the errors instance
-		this.errors = new Errors();
+		errors = new Errors();
 		
-		//Create the listener thread
-		this.clientListener = new ErrorSimClientListener(clientPort, verbose, this);
-		this.serverListener = new ErrorSimServerListener(serverPort, serverAddress, verbose, this);
-		this.clientListenerThread = new Thread(clientListener);
-		this.serverListenerThread = new Thread(serverListener);
+		//Create the listeners
+		clientListener = new ErrorSimClientListener(clientPort, verbose, this);
+		serverListener = new ErrorSimServerListener(serverPort, serverAddress, verbose, this);
+		serverListenerThread = new Thread(serverListener);
 	}
 	
 	public void start () {
-		this.clientListenerThread.start();
-		this.serverListenerThread.start();
+		clientListener.start();
+		serverListenerThread.start();
 	}
 	
 	private void shutdown (Console c, String[] args) {
@@ -504,12 +642,6 @@ public class ErrorSim {
 			c.println("Error: Too many parameters.");
 		} else {
 			clientListener.close();
-			try {
-				clientListenerThread.join();
-			} catch (InterruptedException e) {
-				c.printerr("Error closing client listener thread.");
-				System.exit(1);
-			}
 			serverListener.close();
 			try {
 				serverListenerThread.join();
@@ -549,23 +681,12 @@ public class ErrorSim {
 		if(args.length > 2) {
 			c.println("Error: Too many parameters.");
 		} else if(args.length == 1) {
-			c.println("Client port: " + this.clientListener.getClientPort());
+			c.println("Client port: " + this.clientListener.getClientKnownPort());
 		} else if(args.length == 2) {
 			int port = Integer.parseInt(args[1]);
 			
 			if(port > 0 && port < 65536) {
-				boolean verbose = this.clientListener.verbose;
-				
-				this.clientListener.close();
-				try {
-					this.clientListenerThread.join();
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-				//Restart the listener
-				this.clientListener = new ErrorSimClientListener(port, verbose, this);
-				this.clientListenerThread = new Thread(clientListener);
-				this.clientListenerThread.start();
+				clientListener.setClientKnownPort(port);
 			}
 			else {
 				c.println("Invalid argument");
@@ -577,7 +698,7 @@ public class ErrorSim {
 		if(args.length > 2) {
 			c.println("Error: Too many parameters.");
 		} else if(args.length == 1) {
-			c.println("Server port: " + this.serverListener.getServerPort());
+			c.println("Server port: " + this.serverListener.getServerKnownPort());
 		} else if(args.length == 2) {
 			int port = Integer.parseInt(args[1]);
 			
@@ -609,7 +730,7 @@ public class ErrorSim {
 			c.println("Server ip " + this.serverListener.getServerAddress());
 		} else if(args.length == 2) {
 			try {
-				int serverPort = this.serverListener.getServerPort();
+				int serverPort = this.serverListener.getServerKnownPort();
 				boolean verbose = this.serverListener.verbose;
 				
 				InetAddress serverAddress = InetAddress.getByName(args[1]);
@@ -645,7 +766,7 @@ public class ErrorSim {
 						ErrorInstruction.errorTypes.DROP, 	//Error type
 						Integer.parseInt(args[2]),			//Affected packet type
 						0,									//Time delay - not used here
-						Integer.parseInt(args[3])));		//Repeat count
+						Integer.parseInt(args[3])));		//How many times to perform
 			}
 			catch(IllegalArgumentException e) {
 				c.println("Error: Invalid argument");
@@ -671,7 +792,7 @@ public class ErrorSim {
 						ErrorInstruction.errorTypes.DELAY, 	//Error type
 						Integer.parseInt(args[2]),			//Affected packet type
 						Integer.parseInt(args[3]),			//Time delay
-						Integer.parseInt(args[4])));		//Repeat count
+						Integer.parseInt(args[4])));		//How many times to perform
 			}
 			catch(IllegalArgumentException e) {
 				c.println("Error: Invalid argument");
@@ -697,7 +818,7 @@ public class ErrorSim {
 						ErrorInstruction.errorTypes.DUPLICATE, 	//Error type
 						Integer.parseInt(args[2]),			//Affected packet type
 						Integer.parseInt(args[3]),			//Time delay
-						Integer.parseInt(args[4])));		//Repeat count
+						Integer.parseInt(args[4])));		//How many times to perform
 			}
 			catch(IllegalArgumentException e) {
 				c.println("Error: Invalid argument");
@@ -723,12 +844,12 @@ public class ErrorSim {
 		c.println("serverip [x] - Outputs the IP address currently being used to communicate with "
 				+ "the server if x is not provided. If parameter x is provided, then the IP address "
 				+ "is changed to x.");
-		c.println("drop [A B C] - Drops a packet. A = packet type, B = packet number, C = repeat count.");
-		c.println("	Valid packet types are RRQ, WRQ, DATA, ACK, ERROR. Reapeat count < 0 is infinite.");
-		c.println("delay [A B C D] - Delays a packet. A = packet type, B = packet number, C = delay time (ms), D = repeat count.");
-		c.println("	Valid packet types are RRQ, WRQ, DATA, ACK, ERROR. Reapeat count < 0 is infinite.");
-		c.println("duplicate [A B C D] - Duplicates a packet. A = packet type, B = packet number, C = time between packets (ms), D = repeat count.");
-		c.println("	Valid packet types are RRQ, WRQ, DATA, ACK, ERROR. Reapeat count < 0 is infinite.");
+		c.println("drop [A B C] - Drops a packet. A = packet type, B = packet number, C = # of times to create error.");
+		c.println("	Valid packet types are RRQ, WRQ, DATA, ACK, ERROR. C < 0 is infinite.");
+		c.println("delay [A B C D] - Delays a packet. A = packet type, B = packet number, C = delay time (ms), D = # of times to create error.");
+		c.println("	Valid packet types are RRQ, WRQ, DATA, ACK, ERROR. D < 0 is infinite.");
+		c.println("duplicate [A B C D] - Duplicates a packet. A = packet type, B = packet number, C = time between packets (ms), D = # of times to create error.");
+		c.println("	Valid packet types are RRQ, WRQ, DATA, ACK, ERROR. D < 0 is infinite.");
 		c.println("help - Shows help information.");
 	}
 	
