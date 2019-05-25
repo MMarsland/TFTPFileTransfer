@@ -1,6 +1,11 @@
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
 
 /**
  * Represents a TFTP packet which has been received or will be sent
@@ -54,7 +59,7 @@ public abstract class TFTPPacket {
 	public abstract String toString();
 	
 	/**
-	 * Print the type, parameters and number of bytes for a TFTPPacket
+	 * Print the type, parameters and number of bytes for a TFTPPacket.
 	 */
 	public void print()
 	{
@@ -79,18 +84,63 @@ public abstract class TFTPPacket {
 	{
 		if (bytes.length < 4) {
 			throw new IllegalArgumentException("Packet is not long enough.");
-		} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) == 1) {
+		}
+		
+		TFTPOpcode opcode = TFTPOpcode.fromInt(ByteBuffer.wrap(
+				new byte[] {0, 0, bytes[0], bytes[1]}).getInt());
+		
+		switch (opcode) {
+		case RRQ:
 			return new TFTPPacket.RRQ(bytes);
-		} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) == 2) {
+		case WRQ:
 			return new TFTPPacket.WRQ(bytes);
-		} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) == 3) {
+		case DATA:
 			return new TFTPPacket.DATA(bytes);
-		} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) == 4) {
+		case ACK:
 			return new TFTPPacket.ACK(bytes);
-		} else if ((((int)bytes[1]) | (((int)bytes[0]) << 8)) == 5) {
+		case ERROR:
 			return new TFTPPacket.ERROR(bytes);
-		} else {
-			throw new IllegalArgumentException(String.format("Unkown Opcode."));
+		case OACK:
+			return new TFTPPacket.OACK(bytes);
+		default:
+			throw new IllegalArgumentException("Unkown Opcode.");
+		}
+	}
+	
+	private static enum TFTPOpcode {
+		RRQ(1), WRQ(2), DATA(3), ACK(4), ERROR(5), OACK(6);
+		
+		private int opcode;
+		
+		private TFTPOpcode(int opcode)
+		{
+			this.opcode = opcode;
+		}
+		
+		public int getOpcode ()
+		{
+			return this.opcode;
+		}
+		
+		public static TFTPOpcode fromInt (int opcode)
+				throws IllegalArgumentException
+		{
+			if (opcode == 1) {
+				return TFTPOpcode.RRQ;
+			} else if (opcode == 2) {
+				return TFTPOpcode.WRQ;
+			} else if (opcode == 3) {
+				return TFTPOpcode.DATA;
+			} else if (opcode == 4) {
+				return TFTPOpcode.ACK;
+			} else if (opcode == 5) {
+				return TFTPOpcode.ERROR;
+			} else if (opcode == 6) {
+				return TFTPOpcode.OACK;
+			} else {
+				throw new IllegalArgumentException(
+						String.format("Unkown Opcode %d.", opcode));
+			}
 		}
 	}
 	
@@ -151,7 +201,7 @@ public abstract class TFTPPacket {
 	public static enum TFTPError {
 		ERROR(0), FILE_NOT_FOUND(1), ACCESS_VIOLATION(2), DISK_FULL(3),
 		ILLEGAL_OPERATION(4), UNKOWN_TRANSFER_ID(5), FILE_ALREADY_EXISTS(6),
-		NO_SUCH_USER(7);
+		NO_SUCH_USER(7), OPTION_NEGOTIATION_ERROR(8);
 		
 		/**
 		 * The integer value of the error code
@@ -188,6 +238,8 @@ public abstract class TFTPPacket {
 					return TFTPError.FILE_ALREADY_EXISTS;
 				case 7:	
 					return TFTPError.NO_SUCH_USER;
+				case 8:
+					return TFTPError.OPTION_NEGOTIATION_ERROR;
 				default:
 					return TFTPError.ERROR;
 			}
@@ -195,53 +247,258 @@ public abstract class TFTPPacket {
 	}
 	
 	/**
-	 * Represents a TFTP read request
+	 * Represents a TFTP packets set of options (RFC 2347).
 	 * 
 	 * @author Samuel Dewan
 	 */
-	public static class RRQ extends TFTPPacket {
-		/*
-		 *  2 bytes     string    1 byte     string   1 byte
-         *  ------------------------------------------------
-         * | Opcode |  Filename  |   0  |    Mode    |   0  |
-         *  ------------------------------------------------ 
-		 */
+	public static class OptionSet {
+		private Map<String, String> options;
 		
 		/**
-		 * Name of file to be read
+		 * Create a new empty options set.
+		 */
+		private OptionSet ()
+		{
+			options = new HashMap<String, String>();
+		}
+		
+		/**
+		 * Create a new options set with options parsed from a byte array.
+		 * 
+		 * @param bytes The options portion of a received packet
+		 */
+		private OptionSet (byte[] bytes) throws IllegalArgumentException
+		{
+			int position = 0;
+			
+			while (position != bytes.length) {
+				// Find end of option name
+				int string_end = position;
+				for (; (string_end < bytes.length) && (bytes[string_end] != 0);
+						string_end++) {}
+				
+				// Check if option name is cut off
+				if (string_end == bytes.length) {
+					throw new IllegalArgumentException("Invalid option format");
+				}
+				
+				// Get string of option name
+				String option = new String(Arrays.copyOfRange(bytes, position,
+						string_end), StandardCharsets.UTF_8).toLowerCase();
+				
+				position += string_end;
+				
+				// Find end of option value
+				string_end = position;
+				for (; (string_end < bytes.length) && (bytes[string_end] != 0);
+						string_end++) {}
+				
+				// Check if option value is cut off
+				if (string_end == bytes.length) {
+					throw new IllegalArgumentException("Invalid option format");
+				}
+				
+				// Get string of option value
+				String value = new String(Arrays.copyOfRange(bytes, position,
+						string_end), StandardCharsets.UTF_8);
+				
+				position += string_end;
+				
+				// Add option to map
+				options.put(option, value);
+			}
+		}
+		
+		/**
+		 * Get the value of an option.
+		 * 
+		 * @param option The option for which the value should be found
+		 * @return The value of the option or null if the option is not
+		 * specified
+		 */
+		public String getOptionValue (String option)
+		{
+			return options.get(option.toLowerCase());
+		}
+		
+		/**
+		 * Get a set of all options in this set.
+		 * 
+		 * @return A set of all specified options
+		 */
+		public Set<String> getOptions () {
+			return options.keySet();
+		}
+		
+		/**
+		 * Add a new option to this set.
+		 * 
+		 * @param option The option to add
+		 * @param value The value for the new option
+		 */
+		public void addOption (String option, String value)
+		{
+			options.put(option.toLowerCase(), value);
+		}
+		
+		/**
+		 * Remove an option from this set.
+		 * 
+		 * @param option The option to be removed
+		 * @return The value that the option had or null if the option was not
+		 * specified
+		 */
+		public String removeOption (String option)
+		{
+			return options.remove(option.toLowerCase());
+		}
+		
+		/**
+		 * Marshal the options for this set.
+		 * 
+		 * @return Buffer of the marshaled options
+		 */
+		private byte[] getBytes ()
+		{
+			byte data[] = new byte[this.size()];
+			
+			int position = 0;
+			
+			// Get an iterator for all of the options in this packet
+		    Iterator<Entry<String, String>> it =
+		    		this.options.entrySet().iterator();
+		    
+		    while (it.hasNext()) {
+		    	Map.Entry<String, String> pair =
+		        		(Map.Entry<String, String>)it.next();
+		    	
+		    	// Copy option name to output buffer
+				byte key[] = pair.getKey().getBytes(StandardCharsets.UTF_8);
+				System.arraycopy(key, 0, data, position, key.length);
+				position += key.length;
+				data[position] = 0;
+				position += 1;
+				
+				// Copy option value to output buffer
+				byte value[] = pair.getValue().getBytes(StandardCharsets.UTF_8);
+				System.arraycopy(value, 0, data, position, value.length);
+				position += value.length;
+				data[position] = 0;
+				position += 1;
+		    }
+			
+			return data;
+		}
+		
+		/**
+		 * Get the size of this option set when marshaled.
+		 * 
+		 * @return The length of the array that would be returned by getBytes
+		 */
+		public int size() {
+			int size = 0;
+			
+			// Get an iterator for all of the options in this packet
+		    Iterator<Entry<String, String>> it =
+		    		this.options.entrySet().iterator();
+		    
+		    while (it.hasNext()) {
+		    	Map.Entry<String, String> pair =
+		        		(Map.Entry<String, String>)it.next();
+		    	
+		    	size += pair.getKey().length() + pair.getValue().length() + 2;
+		    }
+			
+			return size;
+		}
+		
+		/**
+		 * Get a string representation of this option set.
+		 */
+		public String toString()
+		{
+			StringBuilder str = new StringBuilder();
+			
+			str.append("{");
+			
+			// Get an iterator for all of the options in this packet
+		    Iterator<Entry<String, String>> it =
+		    		this.options.entrySet().iterator();
+		    
+		    // Add the first option to the string without a preceding comma
+		    if (it.hasNext()) {
+		    	Map.Entry<String, String> pair =
+		    			(Map.Entry<String, String>)it.next();
+		    	
+		    	str.append(String.format("%s: \"%s\"", pair.getKey(),
+		    			pair.getValue()));
+		    }
+		    
+		    // Add all subsequent options to the string with a preceding comma
+		    while (it.hasNext()) {
+		        Map.Entry<String, String> pair =
+		        		(Map.Entry<String, String>)it.next();
+		        
+		        
+		        str.append(String.format(", %s: \"%s\"", pair.getKey(),
+		    			pair.getValue()));
+		    }
+			
+		    str.append("}");
+		    
+			return str.toString();
+		}
+	}
+	
+	/**
+	 * Represents a TFTP request.
+	 * 
+	 * @author Samuel Dewan
+	 */
+	private static abstract class RQ extends TFTPPacket {
+		/**
+		 * Name of file to be read or written
 		 */
 		private String filename;
 		/**
 		 * Transfer mode
 		 */
 		private TFTPMode mode;
+		/**
+		 * Options in this request
+		 */
+		private OptionSet options;
 		
 		/**
-		 * Create a read request
+		 * Create a request.
 		 * 
 		 * @param filename Name of the file to be requested
 		 * @param mode TFTP mode for the request
 		 */
-		public RRQ (String filename, TFTPMode mode)
+		public RQ (String filename, TFTPMode mode)
 		{
 			this.filename = filename;
 			this.mode = mode;
+			
+			this.options = new OptionSet();
 		}
 		
 		/**
-		 * Create a read request from received data
+		 * Create a request from received data.
 		 * 
 		 * @param bytes The received packet
 		 * @throws IllegalArgumentException
 		 */
-		public RRQ (byte[] bytes) throws IllegalArgumentException
-		{
+		public RQ (byte[] bytes, TFTPOpcode opcode)
+				throws IllegalArgumentException
+		{	
 			if (bytes.length < 4) {
 				throw new IllegalArgumentException("Read request is too short");
-			} else if (ByteBuffer.wrap(
-					new byte[] {0, 0, bytes[0], bytes[1]}).getInt() != 1) {
+			} else if (TFTPOpcode.fromInt(ByteBuffer.wrap(
+					new byte[] {0, 0, bytes[0], bytes[1]}).getInt()) !=
+					opcode) {
 				throw new IllegalArgumentException(
-						"Incorrect opcode for read request");
+						"Incorrect opcode for request");
 			}
 			
 			// Find end of first string
@@ -251,7 +508,7 @@ public abstract class TFTPPacket {
 			
 			if (filename_end == bytes.length) {
 				throw new IllegalArgumentException(
-						"Invalid read request format");
+						"Invalid request format");
 			}
 			
 			this.filename = new String(Arrays.copyOfRange(bytes, 2,
@@ -270,10 +527,14 @@ public abstract class TFTPPacket {
 			String mode = new String(Arrays.copyOfRange(bytes,
 					filename_end + 1, mode_end), StandardCharsets.UTF_8);
 			this.mode = TFTPMode.parseFromString(mode);
+			
+			
+			this.options = new OptionSet(Arrays.copyOfRange(bytes, mode_end + 1,
+					bytes.length));
 		}
 		
 		/**
-		 * Get the filename for this request
+		 * Get the filename for this request.
 		 * 
 		 * @return The filename for this request
 		 */
@@ -283,7 +544,7 @@ public abstract class TFTPPacket {
 		}
 
 		/**
-		 * Get the TFTP mode for this request
+		 * Get the TFTP mode for this request.
 		 * 
 		 * @return The TFTP mode for this request
 		 */
@@ -291,50 +552,119 @@ public abstract class TFTPPacket {
 		{
 			return mode;
 		}
-	
-		@Override
-		public byte[] toBytes()
+		
+		/**
+		 * Get the set of options in this request.
+		 * 
+		 * @return The set of options in this request.
+		 */
+		public OptionSet getOptions ()
+		{
+			return this.options;
+		}
+		
+		/**
+		 * Marshal request packet.
+		 * 
+		 * @param opcode The opcode that should be used for this packet
+		 * @return Buffer containing the marshaled packet
+		 */
+		private byte[] toBytes(TFTPOpcode opcode)
 		{
 			byte data[] = new byte[this.size()];
 
-			data[0] = 0;
-			data[1] = 1;
+			data[0] = (byte) ((opcode.getOpcode() >> 8) & 0xFF);
+			data[1] = (byte) (opcode.getOpcode() & 0xFF);
 
+			// Copy file name to output
 			byte filenameBytes[] = filename.getBytes(StandardCharsets.UTF_8);
 			System.arraycopy(filenameBytes, 0, data, 2, filenameBytes.length);
 			data[filenameBytes.length + 2] = 0;
 
+			// Copy mode to output
 			byte modeBytes[] = mode.toString().getBytes(StandardCharsets.UTF_8);
 			System.arraycopy(modeBytes, 0, data, filenameBytes.length + 3,
 					modeBytes.length);
-			data[data.length - 1] = 0;
+			data[filenameBytes.length + modeBytes.length + 3] = 0;
+			
+			// Copy options to output
+			byte options[] = this.options.getBytes();
+			System.arraycopy(options, 0, data, filenameBytes.length +
+					modeBytes.length + 4, options.length);
 			
 			return data;
+		}
+		
+		@Override
+		public int size() {
+			return filename.length() + mode.toString().length() +
+					this.options.size() + 4;
+		}
+	}
+	
+	/**
+	 * Represents a TFTP read request
+	 * 
+	 * @author Samuel Dewan
+	 */
+	public static class RRQ extends RQ {
+		/*
+		 *  2 bytes     string    1 byte     string   1 byte
+         *  ------------------------------------------------
+         * | Opcode |  Filename  |   0  |    Mode    |   0  |
+         *  ------------------------------------------------ 
+		 */
+		
+		/**
+		 * Create a read request.
+		 * 
+		 * @param filename Name of the file to be requested
+		 * @param mode TFTP mode for the request
+		 */
+		public RRQ (String filename, TFTPMode mode)
+		{
+			super(filename, mode);
+		}
+		
+		/**
+		 * Create a read request from received data.
+		 * 
+		 * @param bytes The received packet
+		 * @throws IllegalArgumentException
+		 */
+		public RRQ (byte[] bytes) throws IllegalArgumentException
+		{
+			super(bytes, TFTPOpcode.RRQ);
+		}
+		
+		@Override
+		public byte[] toBytes()
+		{
+			return super.toBytes(TFTPOpcode.RRQ);
 		}
 
 		@Override
 		public String toString()
 		{
-			return String.format("Read Request <filename: \"%s\", mode: %s>",
-					this.filename, this.mode.toString());
+			return String.format(
+					"Read Request <filename: \"%s\", mode: %s, options: %s>",
+					super.filename, super.mode.toString(),
+					super.options.toString());
 		}
-
-		@Override
-		public int size() {
-			return filename.length() + mode.toString().length() + 4;
-		}
-		
 	}
 	
-	public static class WRQ extends TFTPPacket {
+	/**
+	 * Represents a TFTP write request.
+	 * 
+	 * @author Samuel Dewan
+	 */
+	public static class WRQ extends RQ {
 		/**
-		 * Name of file to be written
+		 *  2 bytes     string    1 byte     string   1 byte
+         *  ------------------------------------------------
+         * | Opcode |  Filename  |   0  |    Mode    |   0  |
+         *  ------------------------------------------------
 		 */
-		private String filename;
-		/**
-		 * Transfer mode
-		 */
-		private TFTPMode mode;
 		
 		/**
 		 * Create a write request.
@@ -343,8 +673,7 @@ public abstract class TFTPPacket {
 		 */
 		public WRQ (String filename, TFTPMode mode)
 		{
-			this.filename = filename;
-			this.mode = mode;
+			super(filename, mode);
 		}
 		
 		/**
@@ -355,98 +684,30 @@ public abstract class TFTPPacket {
 		 */
 		public WRQ (byte[] bytes) throws IllegalArgumentException
 		{
-			if (bytes.length < 4) {
-				throw new IllegalArgumentException(
-						"Write request is too short");
-			} else if (ByteBuffer.wrap(
-					new byte[] {0, 0, bytes[0], bytes[1]}).getInt() != 2) {
-				throw new IllegalArgumentException(
-						"Incorrect opcode for write request");
-			}
-			
-			// Find end of first string
-			int filename_end = 2;
-			for (; (filename_end < bytes.length) && (bytes[filename_end] != 0);
-					filename_end++) {}
-			
-			if (filename_end == bytes.length) {
-				throw new IllegalArgumentException(
-						"Invalid write request format");
-			}
-			
-			this.filename = new String(Arrays.copyOfRange(bytes, 2,
-					filename_end), StandardCharsets.UTF_8);
-			
-			// Find end of second string
-			int mode_end = filename_end + 1;
-			for (; (mode_end < bytes.length) && (bytes[mode_end] != 0);
-					mode_end++) {}
-			
-			if (mode_end == bytes.length) {
-				throw new IllegalArgumentException(
-						"Invalid write request format");
-			}
-			
-			String mode = new String(Arrays.copyOfRange(bytes,
-					filename_end + 1, mode_end), StandardCharsets.UTF_8);
-			this.mode = TFTPMode.parseFromString(mode);
-		}
-		
-		/**
-		 * Get the filename for this request
-		 * 
-		 * @return The filename for this request
-		 */
-		public String getFilename()
-		{
-			return filename;
-		}
-
-		/**
-		 * Get the TFTP mode for this request
-		 * 
-		 * @return The TFTP mode for this request
-		 */
-		public TFTPMode getMode()
-		{
-			return mode;
+			super(bytes, TFTPOpcode.WRQ);
 		}
 		
 		@Override
 		public byte[] toBytes()
 		{
-			byte data[] = new byte[this.size()];
-
-			data[0] = 0;
-			data[1] = 2;
-
-			byte filenameBytes[] = this.filename.getBytes(
-					StandardCharsets.UTF_8);
-			System.arraycopy(filenameBytes, 0, data, 2, filenameBytes.length);
-			data[filenameBytes.length + 2] = 0;
-
-			byte modeBytes[] = this.mode.toString().getBytes(
-					StandardCharsets.UTF_8);
-			System.arraycopy(modeBytes, 0, data, filenameBytes.length + 3,
-					modeBytes.length);
-			data[data.length - 1] = 0;
-			
-			return data;
+			return super.toBytes(TFTPOpcode.WRQ);
 		}
 		
 		@Override
 		public String toString()
 		{
-			return String.format("Write Request <filename: \"%s\", mode: %s>",
-					this.filename, this.mode.toString());
-		}
-		
-		@Override
-		public int size() {
-			return this.filename.length() + this.mode.toString().length() + 4;
+			return String.format(
+					"Write Request <filename: \"%s\", mode: %s, options: %s>",
+					super.filename, super.mode.toString(),
+					super.options.toString());
 		}
 	}
 	
+	/**
+	 * Represents a TFTP Data Packet.
+	 * 
+	 * @author Samuel Dewan
+	 */
 	public static class DATA extends TFTPPacket {
 		/*
 		 *  2 bytes     2 bytes      n bytes
@@ -492,8 +753,9 @@ public abstract class TFTPPacket {
 		{
 			if (bytes.length < 4) {
 				throw new IllegalArgumentException("Data packet is too short");
-			} else if (ByteBuffer.wrap(
-					new byte[] {0, 0, bytes[0], bytes[1]}).getInt() != 3) {
+			} else if (TFTPOpcode.fromInt(ByteBuffer.wrap(
+					new byte[] {0, 0, bytes[0], bytes[1]}).getInt()) !=
+					TFTPOpcode.DATA) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for data packet");
 			}
@@ -531,8 +793,8 @@ public abstract class TFTPPacket {
 		{
 			byte data[] = new byte[this.size()];
 
-			data[0] = 0;
-			data[1] = 3;
+			data[0] = (byte) ((TFTPOpcode.DATA.getOpcode() >> 8) & 0xFF);
+			data[1] = (byte) (TFTPOpcode.DATA.getOpcode() & 0xFF);
 			
 			data[2] = (byte) ((this.blockNum >> 8) & 0xFF);
 			data[3] = (byte) (this.blockNum & 0xFF);
@@ -555,6 +817,11 @@ public abstract class TFTPPacket {
 		}
 	}
 	
+	/**
+	 * Represents a TFTP ACK packet.
+	 * 
+	 * @author Samuel Dewan
+	 */
 	public static class ACK extends TFTPPacket {
 		/*
 		 *  2 bytes     2 bytes
@@ -594,8 +861,9 @@ public abstract class TFTPPacket {
 			if (bytes.length != 4) {
 				throw new IllegalArgumentException(
 						"Invalid length for ACK packet");
-			} else if (ByteBuffer.wrap(
-					new byte[] {0, 0, bytes[0], bytes[1]}).getInt() != 4) {
+			} else if (TFTPOpcode.fromInt(ByteBuffer.wrap(
+					new byte[] {0, 0, bytes[0], bytes[1]}).getInt()) !=
+					TFTPOpcode.ACK) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for ACK packet");
 			}
@@ -618,8 +886,8 @@ public abstract class TFTPPacket {
 		{
 			byte data[] = new byte[this.size()];
 
-			data[0] = 0;
-			data[1] = 4;
+			data[0] = (byte) ((TFTPOpcode.ACK.getOpcode() >> 8) & 0xFF);
+			data[1] = (byte) (TFTPOpcode.ACK.getOpcode() & 0xFF);
 			
 			data[2] = (byte) ((this.blockNum >> 8) & 0xFF);
 			data[3] = (byte) (this.blockNum & 0xFF);
@@ -640,6 +908,11 @@ public abstract class TFTPPacket {
 		}
 	}
 	
+	/**
+	 * Represents a TFTP error packet.
+	 * 
+	 * @author Samuel Dewan
+	 */
 	public static class ERROR extends TFTPPacket {
 		/*  2 bytes     2 bytes      string    1 byte
 		 *  -----------------------------------------
@@ -678,8 +951,9 @@ public abstract class TFTPPacket {
 		{	
 			if (bytes.length < 5) {
 				throw new IllegalArgumentException("Error packet is too short");
-			} else if (ByteBuffer.wrap(
-					new byte[] {0, 0, bytes[0], bytes[1]}).getInt() != 5) {
+			} else if (TFTPOpcode.fromInt(ByteBuffer.wrap(
+					new byte[] {0, 0, bytes[0], bytes[1]}).getInt()) !=
+					TFTPOpcode.ERROR) {
 				throw new IllegalArgumentException(
 						"Incorrect opcode for error packet");
 			}
@@ -724,8 +998,8 @@ public abstract class TFTPPacket {
 		{
 			byte data[] = new byte[this.size()];
 
-			data[0] = 0;
-			data[1] = 5;
+			data[0] = (byte) ((TFTPOpcode.ERROR.getOpcode() >> 8) & 0xFF);
+			data[1] = (byte) (TFTPOpcode.ERROR.getOpcode() & 0xFF);
 			
 			data[2] = (byte) ((this.error.code >> 8) & 0xFF);
 			data[3] = (byte) (this.error.code & 0xFF);
@@ -748,6 +1022,90 @@ public abstract class TFTPPacket {
 		@Override
 		public int size() {
 			return this.description.length() + 4;
+		}
+	}
+	
+	/**
+	 * Represents a TFTP options acknowledge packet.
+	 * 
+	 * @author Samuel Dewan
+	 */
+	public static class OACK extends TFTPPacket {
+		/*  +-------+---~~---+---+---~~---+---+---~~---+---+---~~---+---+
+      	 *  |  opc  |  opt1  | 0 | value1 | 0 |  optN  | 0 | valueN | 0 |
+      	 *  +-------+---~~---+---+---~~---+---+---~~---+---+---~~---+---+
+		 */
+		
+		/**
+		 * Set of acknowledged options
+		 */
+		private OptionSet options;
+		
+		/**
+		 * Create a new option acknowledge packet.
+		 */
+		public OACK ()
+		{
+			this.options = new OptionSet();
+		}
+	
+		/**
+		 * Create an option acknowledge packet from received data.
+		 * 
+		 * @param bytes The received packet
+		 * @throws IllegalArgumentException
+		 */
+		public OACK (byte[] bytes) throws IllegalArgumentException 
+		{	
+			if (bytes.length < 2) {
+				throw new IllegalArgumentException(
+						"Option acknowledge packet is too short");
+			} else if (TFTPOpcode.fromInt(ByteBuffer.wrap(
+					new byte[] {0, 0, bytes[0], bytes[1]}).getInt()) !=
+					TFTPOpcode.OACK) {
+				throw new IllegalArgumentException(
+						"Incorrect opcode for option acknowledgment packet");
+			}
+			
+			this.options = new OptionSet(Arrays.copyOfRange(bytes, 2,
+					bytes.length));
+		}
+		
+		/**
+		 * Get the set of options in this acknowledge packet.
+		 * 
+		 * @return The set of options in this acknowledge packet.
+		 */
+		public OptionSet getOptions ()
+		{
+			return this.options;
+		}
+		
+		@Override
+		public byte[] toBytes()
+		{
+			byte data[] = new byte[this.size()];
+
+			data[0] = (byte) ((TFTPOpcode.OACK.getOpcode() >> 8) & 0xFF);
+			data[1] = (byte) (TFTPOpcode.OACK.getOpcode() & 0xFF);
+			
+			// Copy options to output
+			byte options[] = this.options.getBytes();
+			System.arraycopy(options, 0, data, 2, options.length);
+			
+			return data;
+		}
+		
+		@Override
+		public String toString()
+		{
+			return String.format("Options Acknowledgment <options: %s>",
+					this.options.toString());
+		}
+		
+		@Override
+		public int size() {
+			return this.options.size() + 4;
 		}
 	}
 }
