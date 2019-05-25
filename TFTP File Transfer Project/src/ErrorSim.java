@@ -14,9 +14,17 @@ import java.util.Timer;
 import java.util.TimerTask;
 import org.apache.commons.cli.*;
 
+/**
+ * Errors class stores all errors currently pending creation
+ */
 class Errors {
 	private LinkedList<ErrorInstruction> errors = new LinkedList<ErrorInstruction>();
 	
+	/**
+	 * Adds a new ErrorInstruction to the error simulators already pending errors
+	 * @param error the new error to add
+	 * @return true if the error was added, false if it already exists
+	 */
 	public synchronized boolean add(ErrorInstruction error) {
 		
 		//Don't allow adding duplicate commands
@@ -30,10 +38,20 @@ class Errors {
 		return true;
 	}
 	
+	/**
+	 * Removes an error from the pending errors
+	 * @param error the error to remove
+	 * @return true if the error was removed, false if it was not found
+	 */
 	public synchronized boolean remove(ErrorInstruction error) {
 		return errors.remove(error);
 	}
 	
+	/**
+	 * Checks a packet to see if any of the pending errors are applicable to it
+	 * @param packet the packet to check
+	 * @return null if no errors apply to the packet, or the ErrorInstruction that does
+	 */
 	public synchronized ErrorInstruction checkPacket(DatagramPacket packet) {
 		if(errors.size() == 0) {
 			return null;
@@ -111,6 +129,9 @@ class Errors {
 		return null;
 	}
 	
+	/**
+	 * Provides a list of all pending errors
+	 */
 	public String toString() {
 		
 		if(errors.size() == 0) {
@@ -129,11 +150,17 @@ class Errors {
 	}
 }
 
+/**
+ * ErrorInstruction class represents an network error that the error simulator should simulate
+ */
 class ErrorInstruction {
+	
+	//All possible packet types that an error can be applied to
 	enum packetTypes{
 		RRQ, WRQ, DATA, ACK, ERROR
 	}
 	
+	//All possible error types that can be created
 	enum errorTypes{
 		DROP, DUPLICATE, DELAY
 	}
@@ -146,6 +173,14 @@ class ErrorInstruction {
 	int occurances;
 	int skipped = 0;
 	
+	/**
+	 * Constructor for ErrorInstruction
+	 * @param packetType the type of packet this error applies to
+	 * @param errorType the type of error that should occur
+	 * @param packetNumber the block number of the packet (for DATA and ACK) or the number of packets to skip before causing error (RRQ, WRQ, ERROR)
+	 * @param delay how much delay to add (for DELAY and DUPLICATE only)
+	 * @param timesToPerform how many times to create this error (negative is infinite)
+	 */
 	ErrorInstruction(packetTypes packetType, errorTypes errorType, int packetNumber, int delay, int timesToPerform)
 	{
 		if(packetNumber < 0) {
@@ -165,16 +200,9 @@ class ErrorInstruction {
 		this.timesToPerform = timesToPerform;
 	}
 	
-	ErrorInstruction(ErrorInstruction ei){
-		this.packetType = ei.packetType;
-		this.errorType = ei.errorType;
-		this.packetNumber = ei.packetNumber;
-		this.delay = ei.delay;
-		this.timesToPerform = ei.timesToPerform;
-		this.occurances = ei.occurances;
-		this.skipped = ei.skipped;
-	}
-	
+	/**
+	 * Checks if two ErrorInstructions are equivalent
+	 */
 	public boolean equals(Object o) {
 		if(this == o) {
 			return true;
@@ -196,6 +224,9 @@ class ErrorInstruction {
 				this.occurances == error.occurances;
 	}
 	
+	/**
+	 * Provides a string representation of an ErrorInstruction
+	 */
 	public String toString() {
 		String desc = "";
 		
@@ -239,7 +270,7 @@ class ErrorInstruction {
 		}
 		
 		if(timesToPerform < 0) {
-			desc += ". Repeat indefinitley.";
+			desc += ". Repeat forever.";
 		}
 		else {
 			desc += ". Perform " + timesToPerform + " time(s), " + (timesToPerform - occurances) + " remaining.";
@@ -247,6 +278,11 @@ class ErrorInstruction {
 		return desc;
 	}
 	
+	/**
+	 * Converts a string into an ErrorType
+	 * @param typeString a string representing the error type
+	 * @return the errorType enum corresponding to the string
+	 */
 	public static errorTypes getErrorType(String typeString) {
 		switch(typeString.toLowerCase()) {
 		case "drop":
@@ -260,6 +296,11 @@ class ErrorInstruction {
 		}
 	}
 	
+	/**
+	 * Converts a string into a PacketType
+	 * @param typeString a string representing a packet type
+	 * @return the packetType enum corresponding to the string
+	 */
 	public static packetTypes getPacketType(String typeString) {
 		switch(typeString.toLowerCase()) {
 		case "rrq":
@@ -278,6 +319,9 @@ class ErrorInstruction {
 	}
 }
 
+/**
+ * Handles all communications to and from the client
+ */
 class ErrorSimClientListener{
 	private ErrorSim errorSim;
 	private DatagramSocket knownSocket;
@@ -291,6 +335,12 @@ class ErrorSimClientListener{
     Thread knownPortListenerThread;
     Thread TIDPortListenerThread;
 	
+    /**
+     * Constructor for ErrorSimClientListener
+     * @param port the port to listen to client on
+     * @param verbose true means debug info will be shown, false is basic output
+     * @param errorSim the instance of errorSim using this class
+     */
 	public ErrorSimClientListener(int port, boolean verbose, ErrorSim errorSim) {
 		this.clientPort = port;
 		this.verbose = verbose;
@@ -317,6 +367,10 @@ class ErrorSimClientListener{
 		TIDPortListenerThread = new Thread(TIDPortListener);
 	}
 	
+	/**
+	 * Sends a packet to the client and applies any applicable pending errors to it
+	 * @param packet the packet to send
+	 */
 	public synchronized void sendToClient(DatagramPacket packet) {
 		ErrorInstruction ei = errorSim.errors.checkPacket(packet);
 		if(ei != null) {
@@ -339,15 +393,26 @@ class ErrorSimClientListener{
 		}
 	}
 
+	/**
+	 * Makes ErrorSimClientListener start listening to the client
+	 */
 	public void start() {
 		knownPortListenerThread.start();
 		TIDPortListenerThread.start();
 	}
 	
+	/**
+	 * Gets the port that this listens to for new requests from the client
+	 * @return the port number
+	 */
 	public int getClientKnownPort() {
 		return clientPort;
 	}
 	
+	/**
+	 * sets the known port that this listens to for new requests from the client
+	 * @param port the port number
+	 */
 	public synchronized void setClientKnownPort(int port) {
 		knownSocket.close();
 		clientPort = port;
@@ -363,20 +428,36 @@ class ErrorSimClientListener{
 		knownPortListenerThread.start();
 	}
 	
+	/**
+	 * stops the ErrorSimClientListener
+	 */
 	public void close()
 	{
 		knownSocket.close();
 	    TIDSocket.close();
 	}
 	
+	/**
+	 * Sets the TID port
+	 * @param port the port number
+	 */
 	private synchronized void setClientPort(int port){
 		clientPort = port;
 	}
 	
+	/**
+	 * Sets the IP address of the client
+	 * @param address the IP address
+	 */
 	private synchronized void setClientAddress(InetAddress address){
 		clientAddress = address;
 	}
 	
+	/**
+	 * Waits to receive a packet from the client
+	 * @param socket the socket to listen to
+	 * @return a packet if one was received or null if the socket was closed
+	 */
 	private DatagramPacket receiveFromClient(DatagramSocket socket) {
 
 		byte data[] = new byte[TFTPPacket.MAX_SIZE];
@@ -404,13 +485,23 @@ class ErrorSimClientListener{
     	return packet;
 	}
 	
+	/**
+	 * Listens to a socket on a new thread so the ErrorSimClientListener can listen to multiple sockets at the same time
+	 */
 	private class SocketListener implements Runnable{
 		private DatagramSocket socket;
 		
+		/**
+		 * Constructor for SocketListener
+		 * @param socket the socket to listen to
+		 */
 		public SocketListener(DatagramSocket socket) {
 			this.socket = socket;
 		}
 		
+		/**
+		 * The overridden run method for this thread
+		 */
 		public void run() {
 			DatagramPacket receivePacket;
 		    
@@ -427,15 +518,26 @@ class ErrorSimClientListener{
 		}
 	}
 
+	/**
+	 * DelayedSendToClient class allows a packet to be sent at some time in the future
+	 */
 	private class DelayedSendToClient extends TimerTask{
 		byte data[];
 		int length;
 
+		/**
+		 * Creates a new task that will send a packet
+		 * @param data the data to send
+		 * @param length the length of the data
+		 */
 		public DelayedSendToClient(byte data[], int length) {
 			this.data = data;
 			this.length = length;
 		}
 		
+		/**
+		 * The overridden run method for this thread
+		 */
 		public synchronized void run() {
 			
 			DatagramPacket packet = new DatagramPacket(data, length, clientAddress, clientPort);
@@ -463,6 +565,9 @@ class ErrorSimClientListener{
 	}
 }
 
+/**
+ * Handles all communication to and from the server
+ */
 class ErrorSimServerListener implements Runnable {
 	private ErrorSim errorSim;
 	private DatagramSocket socket;
@@ -472,6 +577,13 @@ class ErrorSimServerListener implements Runnable {
     boolean verbose;
     Timer timer;
 	
+    /**
+     * Constructor for ErrorSimServerListener
+     * @param port the servers known port
+     * @param address the servers IP address
+     * @param verbose true prints extra debug info, false prints only basic info
+     * @param errorSim the instance of ErrorSim using this class
+     */
 	public ErrorSimServerListener(int port, InetAddress address, boolean verbose, ErrorSim errorSim) {
 		serverPort = port;
 		serverAddress = address;
@@ -488,6 +600,10 @@ class ErrorSimServerListener implements Runnable {
 		timer = new Timer();
 	}
 	
+	/**
+	 * Sends a packet to the server
+	 * @param packet the packet to send
+	 */
 	public synchronized void sendToServer(DatagramPacket packet) {
 		ErrorInstruction ei = errorSim.errors.checkPacket(packet);
 		if(ei != null) {
@@ -510,19 +626,33 @@ class ErrorSimServerListener implements Runnable {
 		}
 	}
 	
+	/**
+	 * Gets the servers known port
+	 * @return the port number
+	 */
 	public int getServerKnownPort() {
 		return serverPort;
 	}
 	
+	/**
+	 * Gets the servers IP address
+	 * @return the IP address
+	 */
 	public InetAddress getServerAddress() {
 		return serverAddress;
 	}
 	
+	/**
+	 * Closes the ErrorSimServerListener
+	 */
 	public void close()
 	{
 		socket.close();
 	}
 
+	/**
+	 * The overridden run method for this thread
+	 */
 	public void run() {
 	    DatagramPacket receivePacket;
 		
@@ -539,10 +669,18 @@ class ErrorSimServerListener implements Runnable {
 	    }
 	}
 	
+	/**
+	 * sets the TID used to communicate with the server
+	 * @param port the port number
+	 */
 	private synchronized void setServerTID(int port){
 		serverTID = port;
 	}
 	
+	/**
+	 * Waits to receive a packet from the server
+	 * @return the packet if one was received, or null if the socket was closed
+	 */
 	private DatagramPacket receiveFromServer() {
 
 		byte data[] = new byte[TFTPPacket.MAX_SIZE];
@@ -570,15 +708,26 @@ class ErrorSimServerListener implements Runnable {
     	return packet;
 	}
 	
+	/**
+	 * DelayedSendToServer class allows a packet to be sent at some time in the future
+	 */
 	private class DelayedSendToServer extends TimerTask{
 		byte data[];
 		int length;
 
+		/**
+		 * Constructor for DelayedSendToServer
+		 * @param data the data to send
+		 * @param length the length of the data
+		 */
 		public DelayedSendToServer(byte data[], int length) {
 			this.data = data;
 			this.length = length;
 		}
 		
+		/**
+		 * The overridden run method
+		 */
 		public synchronized void run() {
 			DatagramPacket packet;
 			TFTPPacket parsedPacket = TFTPPacket.parse(Arrays.copyOf(data, length));
@@ -622,6 +771,13 @@ public class ErrorSim {
 	private Thread serverListenerThread;
 	public Errors errors;
 	
+	/**
+	 * Constructor for the error sim class
+	 * @param clientPort the port to listen to client requests on
+	 * @param serverPort the port to send requests to the server on
+	 * @param serverAddress the IP address of the server
+	 * @param verbose true prints extra debug info, false prints only basic info
+	 */
 	public ErrorSim (int clientPort, int serverPort, InetAddress serverAddress, boolean verbose) {
 		//Create the errors instance
 		errors = new Errors();
@@ -632,11 +788,15 @@ public class ErrorSim {
 		serverListenerThread = new Thread(serverListener);
 	}
 	
+	/**
+	 * Starts the error simulator listener threads
+	 */
 	public void start () {
 		clientListener.start();
 		serverListenerThread.start();
 	}
 	
+	//Handles the shutdown command
 	private void shutdown (Console c, String[] args) {
 		if(args.length > 1) {
 			c.println("Error: Too many parameters.");
@@ -659,6 +819,7 @@ public class ErrorSim {
 		}
 	}
 	
+	//Handles the verbose command
 	private void setVerboseCmd (Console c, String[] args) {
 		if(args.length > 1) {
 			c.println("Error: Too many parameters.");
@@ -668,6 +829,7 @@ public class ErrorSim {
 		}
 	}
 	
+	//Handles the quiet command
 	private void setQuietCmd (Console c, String[] args) {
 		if(args.length > 1) {
 			c.println("Error: Too many parameters.");
@@ -677,6 +839,7 @@ public class ErrorSim {
 		}
 	}
 	
+	//Handles the clientport command
 	private void setClientPortCmd (Console c, String[] args) {
 		if(args.length > 2) {
 			c.println("Error: Too many parameters.");
@@ -694,6 +857,7 @@ public class ErrorSim {
 		}
 	}
 	
+	//Handles the serverport command
 	private void setServerPortCmd (Console c, String[] args) {
 		if(args.length > 2) {
 			c.println("Error: Too many parameters.");
@@ -723,6 +887,7 @@ public class ErrorSim {
 		}
 	}
 	
+	//Handles the serverip command
 	private void setServerIPCmd (Console c, String[] args) {
 		if(args.length > 2) {
 			c.println("Error: Too many parameters.");
@@ -750,6 +915,7 @@ public class ErrorSim {
 		}
 	}
 	
+	//Handles the drop command
 	private void dropCmd (Console c, String[] args) {
 		if(args.length > 4) {
 			c.println("Error: Too many parameters.");
@@ -774,6 +940,7 @@ public class ErrorSim {
 		}
 	}
 	
+	//Handles the delay command
 	private void delayCmd (Console c, String[] args) {
 		if(args.length > 5) {
 			c.println("Error: Too many parameters.");
@@ -800,6 +967,7 @@ public class ErrorSim {
 		}
 	}
 	
+	//Handles the duplicate command
 	private void duplicateCmd (Console c, String[] args) {
 		if(args.length > 5) {
 			c.println("Error: Too many parameters.");
@@ -826,10 +994,12 @@ public class ErrorSim {
 		}
 	}
 	
+	//Handles the errors command
 	private void errorsCmd (Console c, String[] args) {
 		c.println(errors.toString());
 	}
 	
+	//Handles the help command
 	private void helpCmd (Console c, String[] args) {
 		c.println("The following is a list of commands and thier usage:");
 		c.println("shutdown - Closes the error simulator program.");
