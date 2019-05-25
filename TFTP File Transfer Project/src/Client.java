@@ -4,7 +4,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.*;
 import java.util.Arrays;
-import java.util.Scanner;
+import java.util.Map;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -16,23 +16,30 @@ import org.apache.commons.cli.ParseException;
 
 public class Client {
 	/**
-	 * This class is a single-threaded static implementation of a TFTP client.
+	 * This class is a single-threaded implementation of a TFTP client.
 	 * Command line arguments for the first data transfer are accepted
 	 */
-	private static DatagramSocket sendReceiveSocket;
-	private static InetAddress serverAddress;
-	private static int serverPort, replyPort;
-	private static boolean verbose;
-	private static String filename;
+	private DatagramSocket sendReceiveSocket;
+	private int serverPort;
+	private boolean verbose;
 	
-	/*
-	 * Commented out for the moment because I don't think I need this.
-	public Client(int request, InetAddress server, int port)
+	private InetAddress serverAddress;
+	
+	public void setServerAddress(InetAddress serverAddress) {
+		this.serverAddress = serverAddress;
+	}
+	
+
+	public Client(int serverPort, boolean verbose)
 	{
-		this.serverAddress = server;
-		this.serverPort = port;
+		this.serverPort = serverPort;
 		
-		if(verbose) System.out.println("Setting up send/receive socket.");
+		this.verbose = verbose;
+		
+		if(this.verbose) {
+			System.out.println("Setting up send/receive socket.");
+		}
+		
 		try {	//Setting up the socket that will send/receive packets
 			sendReceiveSocket = new DatagramSocket();
 		} catch(SocketException se) { //If the socket can't be created
@@ -40,9 +47,8 @@ public class Client {
 			System.exit(1);
 		}
 	}
-	*/
 	
-	public static void read()
+	public void read(String filename)
 	{
 		/**
 		 * Method to read a file from the server.  The Client must already have the
@@ -103,7 +109,7 @@ public class Client {
 			// Definitely data :)
 			// Strip block number & port
 			blockNum = dataPacket.getBlockNum();
-			replyPort = receivePacket.getPort();
+			int replyPort = receivePacket.getPort();
 			// Check size? Less than 512 == done
 			len = dataPacket.getData().length;
 			if (len < 512) {
@@ -159,7 +165,7 @@ public class Client {
 		System.out.println("File transfer complete!");
 	}
 	
-	public static void write()
+	public void write(String filename)
 	{
 		/**
 		 * Method to write a file to the server.  The Client must already have the server
@@ -206,6 +212,9 @@ public class Client {
 			e.printStackTrace();
 			System.exit(0);
 		}
+    	
+    	int replyPort;
+    	
     	if (ackPacket.getBlockNum() == 0 ) {
 			// Correct acks
 			if(verbose) {
@@ -308,7 +317,7 @@ public class Client {
 		System.out.println("File transfer complete!");
 	}
 	
-	public static void buildRequest(String source, String dest)
+	public void buildRequest(String source, String dest)
 	{
 		/**
 		 * Checks the specified filepaths (source and dest) to see which one is on the server.
@@ -317,7 +326,6 @@ public class Client {
 		 * The IP of the server is take
 		 */
 		DatagramPacket sendPacket = null;
-		replyPort = serverPort;
 		
 		/*
 		 * Checking which file (source or dest) is on the server to determine the type of
@@ -331,7 +339,7 @@ public class Client {
 			String filepath = split[1];
 			
 			try {
-				serverAddress = InetAddress.getByName(addressString);
+				this.serverAddress = InetAddress.getByName(addressString);
 			} catch(UnknownHostException e) {
 				e.printStackTrace();
 				System.exit(1);
@@ -359,9 +367,7 @@ public class Client {
 				System.out.println("Request sent.  Waiting for response from server...");
 			} else System.out.println("Request sent.");
 			
-			filename = dest;
-			
-			read();
+			read(dest);
 			
 			
 		} else if(dest.contains(":")) {		//Create and send a write request
@@ -370,7 +376,7 @@ public class Client {
 			String filepath = split[1];
 			
 			try {
-				serverAddress = InetAddress.getByName(addressString);
+				this.serverAddress = InetAddress.getByName(addressString);
 			} catch(UnknownHostException e) {
 				e.printStackTrace();
 				System.exit(1);
@@ -398,42 +404,196 @@ public class Client {
 				System.out.println("Request sent.  Waiting for response from server...");
 			} else System.out.println("Request sent.");
 	    	
-			filename = source;
-			
-			write();
+			write(source);
 		}
 		
 		else {	//If neither file is on the server, print an error message and quit.
 			System.out.println("Error: neither file is on the server.  Please try another command.");
 		}
 	}
-
-	public static void main(String[] args) {
+	
+	private void shutdown (Console c, String[] args) {
+		c.println("Closing socket and scanner, and shutting down server.");
 		
-		System.out.println("Setting up Client...");
-		
-		serverPort = -1;
-		verbose = false;
-		boolean finished = false;
-		
-		try {	//Setting up the socket that will send/receive packets
-			sendReceiveSocket = new DatagramSocket();
-		} catch(SocketException se) { //If the socket can't be created
-			se.printStackTrace();
+		sendReceiveSocket.close();
+		try {
+			c.close();
+		} catch (IOException e) {
+			c.printerr("Error closing console thread.");
 			System.exit(1);
 		}
 		
-		// The file locations that we'll transfer data to/from.  The order of the filenames will determine
-		// if this is a read or write request (Server file first = RRQ, server file last = WRQ).
-		String source, dest;
-		String[] split;
-		String command = null;
-		Scanner in = new Scanner(System.in);
+		System.exit(0);
+	}
+	
+	private void setVerboseCmd (Console c, String[] args) {
+		c.println("Running in verbose mode.");
+		this.verbose = true;
+	}
+	
+	private void setQuietCmd (Console c, String[] args) {
+		c.println("Running in quiet mode.");
+		this.verbose = false;
+	}
+	
+	private void putCmd (Console c, String[] args) {
+		if (args.length < 2) {
+			// Not enough arguments
+			c.println("Too few arguments.");
+			return;
+		} else if (args.length > 3) {
+			// Too many arguments
+			c.println("Too many arguments.");
+			return;
+		}
+		
+		if (this.serverAddress == null) {
+			c.println("No server specified. Use the connect command to choose a server.");
+			return;
+		}
+		
+		String remoteFile = "";
+		if (args.length == 2) {
+			// Remote name is the same as the local name
+			String[] parts = args[1].split("/");
+			remoteFile = parts[parts.length - 1];
+		} else {
+			// Remote name is specified explicitly
+			remoteFile = args[2];
+		}
+		
+		// Do write request
+		TFTPPacket.WRQ writePacket = new TFTPPacket.WRQ(remoteFile, TFTPPacket.TFTPMode.NETASCII);
+		DatagramPacket request = new DatagramPacket(writePacket.toBytes(), writePacket.size(), serverAddress, serverPort);
+		
+		if (verbose) {
+			c.println("Sending Packet");
+			c.println("Packet Type: RRQ");
+			c.println("Filename: " + remoteFile);
+			c.println("Mode: " + writePacket.getMode().toString());
+			c.println("# of Bytes: " + (request.getData().length - 4));
+		}
+		
+		try {
+			sendReceiveSocket.send(request);
+		} catch(IOException e) {
+			e.printStackTrace();
+			System.exit(1);
+		}
+		
+		if (verbose ) {
+			c.println("Request sent.  Waiting for response from server...");
+		} else {
+			c.println("Request sent.");
+		}
+    	
+		write(args[1]);
+	}
+	
+	private void getCmd (Console c, String[] args) {
+		if (args.length < 2) {
+			// Not enough arguments
+			c.println("Too few arguments.");
+			return;
+		} else if (args.length > 3) {
+			// Too many arguments
+			c.println("Too many arguments.");
+			return;
+		}
+		
+		if (this.serverAddress == null) {
+			c.println("No server specified. Use the connect command to choose a server.");
+			return;
+		}
+		
+		String localFile = "";
+		if (args.length == 2) {
+			// Local name is the same as the remote name
+			String[] parts = args[1].split("/");
+			localFile = parts[parts.length - 1];
+		} else {
+			// Local name is specified explicitly
+			localFile = args[2];
+		}
+		
+		// Do read Request
+		TFTPPacket.RRQ readPacket = new TFTPPacket.RRQ(args[1], TFTPPacket.TFTPMode.NETASCII);
+		DatagramPacket request = new DatagramPacket(readPacket.toBytes(), readPacket.size(), serverAddress, serverPort);
+		
+		if (verbose) {
+			c.println("Sending Packet");
+			c.println("Packet Type: RRQ");
+			c.println("Filename: " + args[1]);
+			c.println("Mode: " + readPacket.getMode().toString());
+			// Block Number not Applicable
+			c.println("# of Bytes: " + (request.getData().length - 4));
+		}
+		
+		try {
+			sendReceiveSocket.send(request);
+		} catch(IOException e) {
+			e.printStackTrace();
+			System.exit(1);
+		}
+		
+		if (verbose ) {
+			c.println("Request sent.  Waiting for response from server...");
+		} else {
+			c.println("Request sent.");
+		}
+		
+		read(localFile);
+	}
+	
+	private void connectCmd (Console c, String[] args) {
+		if (args.length < 2) {
+			// Not enough arguments
+			c.println("Too few arguments.");
+			return;
+		} else if (args.length > 3) {
+			// Too many arguments
+			c.println("Too many arguments.");
+			return;
+		}
+		
+		try {
+			this.setServerAddress(InetAddress.getByName(args[1]));
+		} catch (UnknownHostException e) {
+			c.println("Invalid server: \"" + args[1] + "\"");
+		}
+		
+		if (args.length == 3) {
+			// Parse port
+			try {
+				this.serverPort = Integer.parseInt(args[2]);
+			} catch (NumberFormatException e) {
+				c.println("Invalid port: \"" + args[2] + "\"");
+			}
+		} else {
+			this.serverPort = 69;
+		}
+	}
+	
+	private void helpCmd (Console c, String[] args) {
+		c.println("Avaliable Server Commands:");
+		c.println("connect [server] <ip>\n\tSelect a server, if port is not specified port 69 will be used.");
+		c.println("put [local file] <remote file>\n\tSend a file to the server.");
+		c.println("get [remote file] <local file>\n\tGet a file from the server.");
+		c.println("shutdown\n\tShutdown client.");
+		c.println("verbose\n\tEnable debugging output.");
+		c.println("quiet\n\tDisable debugging output.");
+	}
+
+	public static void main(String[] args) {
+		System.out.println("Setting up Client...");
+		
+		int serverPort = 69;
+		boolean verbose = false;
 		
 		//Setting up the parsing options
 		Option verboseOption = new Option( "v", "verbose", false, "print extra debug info" );
 		
-		Option serverPortOption = Option.builder("sp").argName("server port")
+		Option serverPortOption = Option.builder("p").argName("server port")
                 .hasArg()
                 .desc("the port number of the servers listener")
                 .type(Integer.TYPE)
@@ -454,140 +614,49 @@ public class Client {
 		        verbose = true;
 		    }
 	        
-	        if( line.hasOption("sp")) {
-		        serverPort = Integer.parseInt(line.getOptionValue("sp"));
-		    } else {
-		    	//Continually ask for a server port number until one is specified
-		    	while(serverPort < 1) {
-		    		System.out.println("Enter the well-known server port number for requests (Port number must be positive)");
-		    		System.out.print(">> ");
-		    		command = in.nextLine();
-		    		split = command.split("\\s+");
-		    		if(split[0].toLowerCase().equals("shutdown")) {
-						if(verbose) {
-							System.out.println("Closing socket and scanner, and shutting down server.");
-						}
-						sendReceiveSocket.close();
-						in.close();
-						System.exit(0);
-					}
-		    		try {
-		    			serverPort = Integer.valueOf(split[0]);
-		    		} catch(NumberFormatException e) {
-		    			System.out.println("No integer values found.  Please enter an integer value.");
-		    		}
-		    	}
+	        if( line.hasOption("p")) {
+		        serverPort = Integer.parseInt(line.getOptionValue("p"));
 		    }
 	    } catch( ParseException exp ) {
 	    	System.err.println( "Command line argument parsing failed.  Reason: " + exp.getMessage() );
 		    System.exit(1);
 	    }
 	    
-	    //Gets anything remaining in the command line and initializes source and dest
-		split = line.getArgs();
-		source = null;
-		dest = null;
-		
-		//Sends a prompt to provide filenames if none were given
-		if(split.length < 2) {
-			while(source == null || dest == null) {
-				System.out.print(">> ");
-				command = in.nextLine();
-				split = command.split("\\s+");
-				
-				if(split[0].toLowerCase().equals("help")) {
-					System.out.println("Enter a request in the format: sourceFilePath destinationFilePath");
-					System.out.println("	For RRQ, sourceFilePath should be the server file.  For WRQ, destinationFilePath should be the server file.");
-					System.out.println("	Ex. for a RRQ: 123.456.7.89:/Users/name/source.txt /Users/name/destination");
-					System.out.println("Enter 'shutdown' to close client.");
-					System.out.println("Enter 'verbose' to display more information while transferring");
-					System.out.println("Enter 'quiet' to exit verbose mode");
-				}
-				if(split[0].toLowerCase().equals("verbose")) {
-					System.out.println("Running in verbose mode.");
-					verbose = true;
-				}
-				if(split[0].toLowerCase().equals("quiet")) {
-					System.out.println("Running in quiet mode.");
-					verbose = false;
-				}
-				if(split[0].toLowerCase().equals("shutdown")) {
-					if(verbose) {
-						System.out.println("Closing socket and scanner, and shutting down server.");
-					}
-					sendReceiveSocket.close();
-					in.close();
-					System.exit(0);
-				}
-				
-				if(split.length == 2) {
-					source = split[0];
-					dest = split[1];
-				}
-			} 
-		} else {
-			source = split[0];
-			dest = split[1];
+	    Client client = new Client(serverPort, verbose);
+	    
+	    
+	    // Get the positional arguments and perform a transaction if one is specified
+		String[] positionalArgs = line.getArgs();
+		if (positionalArgs.length == 1) {
+			// Assume that the argument is the server address
+			try {
+				client.setServerAddress(InetAddress.getByName(positionalArgs[0]));
+			} catch (UnknownHostException e) {
+				System.out.println("Invalid server: \"" + positionalArgs[0] + "\"");
+			}
+		} else if (positionalArgs.length == 2) {
+			// Source and destination files specified
+			client.buildRequest(positionalArgs[0], positionalArgs[1]);
+			System.exit(0);
+		} else if (positionalArgs.length > 2) {
+			// Too many arguments
+			System.out.println("Too many files specified, entering interactive mode.");
 		}
-		
-		
-		/*
-		 * Calls the buildRequest function
-		 */
-		buildRequest(source, dest);
-		
-		/*
-		 * Loops until the client is shut down.  Prompts the user for filepaths, server port
-		 * changes, and the verbose option when the previous transfer has finished, then calls
-		 * buildRequest() to send the request.
-		 */
-		//Currently there is no way to set finished to true, but this might be used in the future.
-		while(!finished) {
-			source = null;
-			dest = null;
-			System.out.print(">> ");
-			command = in.nextLine();
-			split = command.split("\\s+");
-			
-			if(split[0].toLowerCase().equals("help")) {
-				System.out.println("Enter a request in the format: sourceFilePath destinationFilePath");
-				System.out.println("	For RRQ, sourceFilePath should be the server file.  For WRQ, destinationFilePath should be the server file.");
-				System.out.println("	Ex. for a RRQ: 123.456.7.89:/Users/name/source.txt /Users/name/destination");
-				System.out.println("Enter 'shutdown' to close client.");
-				System.out.println("Enter 'verbose' to display more information while transferring");
-				System.out.println("Enter 'quiet' to exit verbose mode");
-			}
-			if(split[0].toLowerCase().equals("verbose")) {
-				System.out.println("Running in verbose mode.");
-				verbose = true;
-			}
-			if(split[0].toLowerCase().equals("quiet")) {
-				System.out.println("Running in quiet mode.");
-				verbose = false;
-			}
-			if(split[0].toLowerCase().equals("shutdown")) {
-				if(verbose) {
-					System.out.println("Closing socket and scanner, and shutting down server.");
-				}
-				sendReceiveSocket.close();
-				in.close();
-				System.exit(0);
-				break;
-			}
-			
-			if(split.length == 2) {
-				source = split[0];
-				dest = split[1];
-				buildRequest(source, dest);
-			}
-			
-		}
-		
-		//Closes the socket once the client has been shut down
-		if(verbose) {
-			System.out.println("Closing socket and scanner, and shutting down server.");
-		}
-		sendReceiveSocket.close();
-		in.close();
+
+		// Create and start console UI thread
+		Map<String, Console.CommandCallback> commands = Map.ofEntries(
+				Map.entry("shutdown", client::shutdown),
+				Map.entry("verbose", client::setVerboseCmd),
+				Map.entry("quiet", client::setQuietCmd),
+				Map.entry("put", client::putCmd),
+				Map.entry("get", client::getCmd),
+				Map.entry("connect", client::connectCmd),
+				Map.entry("help", client::helpCmd)
+				);
+
+		Console console = new Console(commands);
+
+		Thread consoleThread = new Thread(console);
+		consoleThread.start();
 	}
 }
