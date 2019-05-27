@@ -199,14 +199,6 @@ public class Client {
 	 */
 	public void write(String filename)
 	{
-	    
-		// Initializing the socket timeout.  If it cannot be set, the file transfer will be stopped.
-		try {
-			sendReceiveSocket.setSoTimeout(5000);
-		} catch(SocketException se) {
-			log.log(0,"Socket timeout could not be set.  Cancelling file transfer.");
-			return;
-		}
 		
 		FileInputStream fis = null;
 		try {
@@ -252,6 +244,14 @@ public class Client {
 			// Incorrect ack
 			log.log(0,"Wrong ACK response. Incorrect block number");
     		throw new IllegalArgumentException();
+		}
+    	
+    	// Initializing the socket timeout.  If it cannot be set, prints an error message but
+    	// continues running.
+    	try {
+			sendReceiveSocket.setSoTimeout(5000);
+		} catch(SocketException se) {
+			log.log(0,"Socket timeout could not be set.  Continuing transfer without socket timeout.");
 		}
     	
 		int replyPort = receivePacket.getPort();
