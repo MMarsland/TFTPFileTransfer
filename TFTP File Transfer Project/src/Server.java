@@ -694,10 +694,7 @@ public class Server {
 		
 		// Create server instance and start it
 	    Server server = new Server(serverPort, verbose);
-		
-		if(verbose) {
-			System.out.println("Listening to client on port " + serverPort);
-		}
+		server.start();
 		
 		// Create and start console UI thread
 		Map<String, Console.CommandCallback> commands = Map.ofEntries(
