@@ -52,7 +52,7 @@ public class Client {
 		
 		try {	//Setting up the socket that will send/receive packets
 			sendReceiveSocket = new DatagramSocket();
-			sendReceiveSocket.setSoTimeout(5000);
+			sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
 		} catch(SocketException se) { //If the socket can't be created
 			se.printStackTrace();
 			System.exit(1);
@@ -108,7 +108,7 @@ public class Client {
 				} catch(IOException e1) {
 					// Checks if the socket timed out
 					if(e1 instanceof SocketTimeoutException) {
-						//If no data blocks have been received yet, send Client back to console to resend request
+						//If no data blocks have been received yet, send Client back to console to re-send request
 						if(blockNum == 0) {
 							log.log(0,  "Timeout while waiting for first DATA packet.  Client returning to console.");
 							try {
@@ -246,15 +246,8 @@ public class Client {
 			return;
 		} 
 		log.log(5,"Successfully opened: "+filename);
-		
-		// Initializing the socket timeout.  If it cannot be set, prints an error message but
-    	// continues running.
-    	try {
-			sendReceiveSocket.setSoTimeout(5000);
-		} catch(SocketException se) {
-			log.log(0,"Socket timeout could not be set.  Continuing transfer without socket timeout.");
-		}
     	
+    	long timeout = 0;
 		TFTPPacket.DATA dataPacket;
 	    DatagramPacket receivePacket;
 	    DatagramPacket sendPacket = null;
@@ -299,7 +292,7 @@ public class Client {
 			log.log(5,"Recieved ACK for block #0.  Starting data transfer...");
 		} else {
 			// Incorrect ack
-			log.log(0,"Wrong ACK response. Incorrect block number");
+			log.log(0,"Wrong ACK response. Incorrect block number.");
 			try {
     			fis.close();
     		} catch (IOException e) {
@@ -345,11 +338,13 @@ public class Client {
 		    	
 		    	try {
 		    		sendReceiveSocket.send(sendPacket);
+		    		sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_DATA_TIMEOUT);
 		    	} catch (IOException e) {
 		    		e.printStackTrace();
 		    		System.exit(1);
 		    	}
 		    	
+		    	timeout = System.currentTimeMillis() + TFTPPacket.TFTP_DATA_TIMEOUT;
 		    	duplicateAck = false;
 		    }
 		    
@@ -377,10 +372,12 @@ public class Client {
 		    			log.log(5,"Re-sending last DATA packet.");
 		    			try {
 				    		sendReceiveSocket.send(sendPacket);
+				    		sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_DATA_TIMEOUT);
 				    	} catch (IOException e2) {
 				    		e2.printStackTrace();
 				    		System.exit(1);
 				    	}
+		    			timeout = System.currentTimeMillis() + TFTPPacket.TFTP_DATA_TIMEOUT;
 		    			resendCount++;
 		    		} else {
 		    		e1.printStackTrace();
@@ -400,12 +397,31 @@ public class Client {
 				System.exit(0);
 			}
 	    	if (ackPacket.getBlockNum() == blockNum ) {
-				// Correct acks
+				// Correct ack
 	    		duplicateAck = false;
-			} else {
-				// Incorrect ack
+			} else if(ackPacket.getBlockNum() < blockNum) {
+				// Duplicate ack
 				log.log(0,"Wrong ACK response. Reason: Incorrect block number.  Ignoring ACK and waiting for another packet.");
+				int timeLeft = (int)(timeout - System.currentTimeMillis());
+				if(timeLeft > 0) {
+					try {
+						sendReceiveSocket.setSoTimeout(timeLeft);
+					} catch(SocketException se) {
+						se.printStackTrace();
+						System.exit(1);
+					}
+				} else {
+					try {
+						sendReceiveSocket.setSoTimeout(10);
+					} catch(SocketException se) {
+						se.printStackTrace();
+						System.exit(1);
+					}
+				}
 				duplicateAck = true;
+			} else {
+				log.log(0,"Error: Block number higher than current block number.  Aborting transfer.");
+				System.exit(1);
 			}
 	    	
 			log.log(5,"Received Packet:"
@@ -676,8 +692,6 @@ public class Client {
 		c.println("logfile [file path]\n\tSet the log file.");
 		c.println("quiet\n\tDisable debugging output.");
 	}
-
-
 	
 	public static void main(String[] args) {
 		log.log(5,"Setting up Client...");
