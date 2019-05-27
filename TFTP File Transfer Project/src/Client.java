@@ -21,7 +21,7 @@ public class Client {
 	 */
 	private DatagramSocket sendReceiveSocket;
 	private int serverPort;
-	private boolean verbose;
+	private static Logger log = new Logger();
 	
 	private InetAddress serverAddress;
 	
@@ -30,15 +30,15 @@ public class Client {
 	}
 	
 
-	public Client(int serverPort, boolean verbose)
+	public Client(int serverPort, int verboseLevel, String logFilePath)
 	{
 		this.serverPort = serverPort;
 		
-		this.verbose = verbose;
+		log.setVerboseLevel(verboseLevel);
 		
-		if(this.verbose) {
-			System.out.println("Setting up send/receive socket.");
-		}
+		log.setLogFile(logFilePath);
+		
+		log.log(5,"Setting up send/receive socket.");
 		
 		try {	//Setting up the socket that will send/receive packets
 			sendReceiveSocket = new DatagramSocket();
@@ -56,9 +56,7 @@ public class Client {
 		 * sends an ack packet back.
 		 */
 		
-		if(verbose) {
-			System.out.println("Reading from server file");
-		}
+		log.log(5,"Reading from server file");
 		
 		TFTPPacket.ACK ackPacket = new TFTPPacket.ACK(0);
 		DatagramPacket sendPacket;
@@ -69,9 +67,8 @@ public class Client {
 			e.printStackTrace();
 			System.exit(0);
 		} 
-		if(verbose) {
-			System.out.println("File ready to be written! filename: "+filename);
-		}
+
+		log.log(5,"File ready to be written! filename: "+filename);
 		
 		byte[] data = new byte[TFTPPacket.MAX_SIZE];
 		DatagramPacket receivePacket;
@@ -82,9 +79,7 @@ public class Client {
 		boolean moreToWrite = true;
 		while (moreToWrite) {
 			// Receive Data Packet
-			if(verbose) {
-				System.out.println("Waiting for data packet");
-			}
+			log.log(5,"Waiting for data packet");
 			
 			data = new byte[TFTPPacket.MAX_SIZE];
 			receivePacket = new DatagramPacket(data, data.length);
@@ -94,15 +89,13 @@ public class Client {
 				e.printStackTrace();
 				System.exit(1);
 			}
-			if(verbose) {
-				System.out.println("Recieved packet from server");
-			}
+			log.log(5,"Recieved packet from server");
 			// Check Packet for correctness
 		    
 			try {
 				dataPacket = new TFTPPacket.DATA(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 			} catch (IllegalArgumentException e) {
-				System.out.println("Not a DATA response to ack! :((((");
+				log.log(0,"Not a DATA response to ack! :((((");
 				e.printStackTrace();
 				System.exit(0);
 			}
@@ -115,18 +108,17 @@ public class Client {
 			if (len < 512) {
 				moreToWrite = false;
 			}
-			if(verbose) {
-				System.out.println("Received Packet:");
-				System.out.println("Packet Type: DATA");
-				System.out.println("Filename: "+filename);
-				System.out.println("Block Number: "+blockNum);
-				System.out.println("# of Bytes: "+len);
-			}
+			log.log(5,
+				"Received Packet:\n"
+				+ "Packet Type: DATA\n"
+				+ "Filename: "+filename+"\n"
+				+ "Block Number: "+blockNum+"\n"
+				+ "# of Bytes: "+len);
 			// Write into file
 			try {
 				fos.write(dataPacket.getData(),0,dataPacket.getData().length);
 			} catch (IOException e) {
-				System.out.println("Failed to write data to file!");
+				log.log(0,"Failed to write data to file!");
 				e.printStackTrace();
 				System.exit(0);
 			}
@@ -136,19 +128,12 @@ public class Client {
 			ackPacket = new TFTPPacket.ACK(blockNum);
 			sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, serverAddress, replyPort);
 			
-			if(verbose) {
-				System.out.println("ACK Packet Successfully Assembled");
-			}
+			log.log(5,"ACK Packet Successfully Assembled");
 			
 			// Send ack packet to server on serverPort
-			if(verbose) {
-				System.out.println("Sending Packet:");
-				System.out.println("Packet Type: ACK");
-				// N/A System.out.println("Filename: "+this.filename);
-				// N/A System.out.println("Mode: "+this.Mode);
-				System.out.println("Block Number: "+blockNum);
-				// N/A System.out.println("# of Bytes: "+len);
-			}
+			log.log(5,"Sending Packet:\n"
+				+ "Packet Type: ACK"
+				+ "Block Number: "+blockNum);
 			
 			try {
 				sendReceiveSocket.send(sendPacket);
@@ -157,12 +142,12 @@ public class Client {
 				System.exit(1);
 			}
 			
-			if(verbose && moreToWrite) {
-				System.out.println("Waiting for Next DATA Block:");
+			if(moreToWrite) {
+				log.log(5,"Waiting for Next DATA Block:");
 			}
 		}
 		
-		System.out.println("File transfer complete!");
+		log.log(5,"File transfer complete!");
 	}
 	
 	public void write(String filename)
@@ -180,9 +165,7 @@ public class Client {
 			e.printStackTrace();
 			System.exit(0);
 		} 
-		if(verbose) {
-			System.out.println("Successfully opened: "+filename);
-		}
+		log.log(5,"Successfully opened: "+filename);
 		
 		TFTPPacket.DATA dataPacket;
 	    DatagramPacket sendPacket, receivePacket;
@@ -199,16 +182,14 @@ public class Client {
 			System.exit(1);
     	}
 	    
-	    if(verbose) {
-			System.out.println("Recieved packet from server.");
-		}
+		log.log(5,"Recieved packet from server.");
 	    
 	    // Parse ACK for correctness
 	    TFTPPacket.ACK ackPacket = null;
     	try {
 			ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 		} catch (IllegalArgumentException e) {
-			System.out.println("Not an ACK Packet! :((((");
+			log.log(0,"Not an ACK Packet! :((((");
 			e.printStackTrace();
 			System.exit(0);
 		}
@@ -217,13 +198,10 @@ public class Client {
     	
     	if (ackPacket.getBlockNum() == 0 ) {
 			// Correct acks
-			if(verbose) {
-				System.out.println("Recieved ACK for block #0.  Starting data transfer...");
-				replyPort = receivePacket.getPort();
-			}
+			log.log(5,"Recieved ACK for block #0.  Starting data transfer...");
 		} else {
 			// Incorrect ack
-			System.out.println("Wrong ACK response. Incorrect block number");
+			log.log(0,"Wrong ACK response. Incorrect block number");
     		throw new IllegalArgumentException();
 		}
     	
@@ -254,14 +232,11 @@ public class Client {
 		    dataPacket = new TFTPPacket.DATA(blockNum, data);
 		    sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, serverAddress, replyPort);
 		    
-		    if(verbose) {
-				System.out.println("Sending Packet:");
-				System.out.println("Packet Type: DATA");
-				System.out.println("Filename: "+filename);
-				// Mode not Applicable
-				System.out.println("Block Number: "+blockNum);
-				System.out.println("# of Bytes: "+len);
-			}
+			log.log(5,"Sending Packet:"
+				+ "Packet Type: DATA"
+				+ "Filename: "+filename
+				+ "Block Number: "+blockNum
+				+ "# of Bytes: "+len);
 		    
 		    try {
 	    		sendReceiveSocket.send(sendPacket);
@@ -270,9 +245,7 @@ public class Client {
     			System.exit(1);
 	    	}
 			// Wait for ACK
-		    if(verbose) {
-				System.out.println("Waiting for ACK packet...");
-			}
+			log.log(5,"Waiting for ACK packet...");
 		    
 		    // New Receive total bytes
 		    data = new byte[TFTPPacket.MAX_SIZE];
@@ -290,7 +263,7 @@ public class Client {
 				ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 				replyPort = receivePacket.getPort();
 			} catch (IllegalArgumentException e) {
-				System.err.println("Wrong Packet Recieved. Reason: Not an ackPacket");
+				log.log(0,"Wrong Packet Recieved. Reason: Not an ackPacket");
 				e.printStackTrace();
 				System.exit(0);
 			}
@@ -298,23 +271,18 @@ public class Client {
 				// Correct acks
 			} else {
 				// Incorrect ack
-				System.err.println("Wrong ACK response. Reason: Incorrect block number");
+				log.log(0,"Wrong ACK response. Reason: Incorrect block number");
 	    		throw new IllegalArgumentException();
 			}
 	    	
-	    	if(verbose) {
-				System.out.println("Received Packet:");
-				System.out.println("Packet Type: ACK");
-				// N/A System.out.println("Filename: "+this.filename);
-				// N/A System.out.println("Mode: "+this.Mode);
-				System.out.println("Block Number: "+blockNum);
-				// N/A System.out.println("# of Bytes: "+len);
-			}
+			log.log(5,"Received Packet:"
+				+"Packet Type: ACK"
+				+"Block Number: "+blockNum);
 			
 		}
 		// All data is sent and last ACK received,
 		// Close socket, quit
-		System.out.println("File transfer complete!");
+		log.log(5,"File transfer complete!");
 	}
 	
 	public void buildRequest(String source, String dest)
@@ -349,23 +317,19 @@ public class Client {
 			TFTPPacket.RRQ readPacket = new TFTPPacket.RRQ(filepath, TFTPPacket.TFTPMode.NETASCII);
 			sendPacket = new DatagramPacket(readPacket.toBytes(), readPacket.size(), serverAddress, serverPort);
 			
-			if(verbose) {
-				System.out.println("Sending Packet");
-				System.out.println("Packet Type: RRQ");
-				System.out.println("Filename: "+filepath);
-				System.out.println("Mode: "+readPacket.getMode().toString());
-				// Block Number not Applicable
-				System.out.println("# of Bytes: "+(sendPacket.getData().length-4));
-			}
+			log.log(5,"Sending Packet"
+				+"Packet Type: RRQ"
+				+"Filename: "+filepath
+				+"Mode: "+readPacket.getMode().toString()
+				+"# of Bytes: "+(sendPacket.getData().length-4));
+
 			try {
 				sendReceiveSocket.send(sendPacket);
 			} catch(IOException e) {
 				e.printStackTrace();
 				System.exit(1);
 			}
-			if(verbose ) {
-				System.out.println("Request sent.  Waiting for response from server...");
-			} else System.out.println("Request sent.");
+			log.log(5,"Request sent.  Waiting for response from server...");
 			
 			read(dest);
 			
@@ -386,29 +350,25 @@ public class Client {
 			TFTPPacket.WRQ writePacket = new TFTPPacket.WRQ(filepath, TFTPPacket.TFTPMode.parseFromString("netascii"));
 			sendPacket = new DatagramPacket(writePacket.toBytes(), writePacket.size(), serverAddress, serverPort);
 			
-			if(verbose) {
-				System.out.println("Sending Packet");
-				System.out.println("Packet Type: RRQ");
-				System.out.println("Filename: "+filepath);
-				System.out.println("Mode: "+writePacket.getMode().toString());
-				// Block Number not Applicable
-				System.out.println("# of Bytes: "+(sendPacket.getData().length-4));
-			}
+			log.log(5,"Sending Packet"
+				+"Packet Type: RRQ"
+				+"Filename: "+filepath
+				+"Mode: "+writePacket.getMode().toString()
+				+"# of Bytes: "+(sendPacket.getData().length-4));
+
 			try {
 				sendReceiveSocket.send(sendPacket);
 			} catch(IOException e) {
 				e.printStackTrace();
 				System.exit(1);
 			}
-			if(verbose ) {
-				System.out.println("Request sent.  Waiting for response from server...");
-			} else System.out.println("Request sent.");
+			log.log(5,"Request sent.  Waiting for response from server...");
 	    	
 			write(source);
 		}
 		
 		else {	//If neither file is on the server, print an error message and quit.
-			System.out.println("Error: neither file is on the server.  Please try another command.");
+			log.log(0,"Error: neither file is on the server.  Please try another command.");
 		}
 	}
 	
@@ -428,12 +388,25 @@ public class Client {
 	
 	private void setVerboseCmd (Console c, String[] args) {
 		c.println("Running in verbose mode.");
-		this.verbose = true;
+		this.log.setVerboseLevel(5);
 	}
 	
+	private void setLogfileCmd (Console c, String[] args) {
+		if (args.length < 2) {
+			// Not enough arguments
+			c.println("Too few arguments.");
+			return;
+		} else if (args.length > 3) {
+			// Too many arguments
+			c.println("Too many arguments.");
+			return;
+		}
+		log.setLogFile(args[1]);
+	}
+
 	private void setQuietCmd (Console c, String[] args) {
 		c.println("Running in quiet mode.");
-		this.verbose = false;
+		this.log.setVerboseLevel(0);
 	}
 	
 	private void putCmd (Console c, String[] args) {
@@ -466,13 +439,11 @@ public class Client {
 		TFTPPacket.WRQ writePacket = new TFTPPacket.WRQ(remoteFile, TFTPPacket.TFTPMode.NETASCII);
 		DatagramPacket request = new DatagramPacket(writePacket.toBytes(), writePacket.size(), serverAddress, serverPort);
 		
-		if (verbose) {
-			c.println("Sending Packet");
-			c.println("Packet Type: RRQ");
-			c.println("Filename: " + remoteFile);
-			c.println("Mode: " + writePacket.getMode().toString());
-			c.println("# of Bytes: " + (request.getData().length - 4));
-		}
+		log.log(5,"Sending Packet"
+			+"Packet Type: RRQ"
+			+"Filename: " + remoteFile
+			+"Mode: " + writePacket.getMode().toString()
+			+"# of Bytes: " + (request.getData().length - 4));
 		
 		try {
 			sendReceiveSocket.send(request);
@@ -481,11 +452,7 @@ public class Client {
 			System.exit(1);
 		}
 		
-		if (verbose ) {
-			c.println("Request sent.  Waiting for response from server...");
-		} else {
-			c.println("Request sent.");
-		}
+		log.log(5,"Request sent.  Waiting for response from server...");
     	
 		write(args[1]);
 	}
@@ -520,14 +487,11 @@ public class Client {
 		TFTPPacket.RRQ readPacket = new TFTPPacket.RRQ(args[1], TFTPPacket.TFTPMode.NETASCII);
 		DatagramPacket request = new DatagramPacket(readPacket.toBytes(), readPacket.size(), serverAddress, serverPort);
 		
-		if (verbose) {
-			c.println("Sending Packet");
-			c.println("Packet Type: RRQ");
-			c.println("Filename: " + args[1]);
-			c.println("Mode: " + readPacket.getMode().toString());
-			// Block Number not Applicable
-			c.println("# of Bytes: " + (request.getData().length - 4));
-		}
+			log.log(5,"Sending Packet"
+				+"Packet Type: RRQ"
+				+"Filename: " + args[1]
+				+"Mode: " + readPacket.getMode().toString()
+				+"# of Bytes: " + (request.getData().length - 4));
 		
 		try {
 			sendReceiveSocket.send(request);
@@ -536,11 +500,7 @@ public class Client {
 			System.exit(1);
 		}
 		
-		if (verbose ) {
-			c.println("Request sent.  Waiting for response from server...");
-		} else {
-			c.println("Request sent.");
-		}
+			log.log(5,"Request sent.  Waiting for response from server...");
 		
 		read(localFile);
 	}
@@ -581,14 +541,16 @@ public class Client {
 		c.println("get [remote file] <local file>\n\tGet a file from the server.");
 		c.println("shutdown\n\tShutdown client.");
 		c.println("verbose\n\tEnable debugging output.");
+		c.println("logfile [file path]\n\tSet the log file.");
 		c.println("quiet\n\tDisable debugging output.");
 	}
 
 	public static void main(String[] args) {
-		System.out.println("Setting up Client...");
+		log.log(5,"Setting up Client...");
 		
 		int serverPort = 69;
-		boolean verbose = false;
+		int verboseLevel = 0;
+		String logFilePath = "";
 		
 		//Setting up the parsing options
 		Option verboseOption = new Option( "v", "verbose", false, "print extra debug info" );
@@ -598,10 +560,17 @@ public class Client {
                 .desc("the port number of the servers listener")
                 .type(Integer.TYPE)
                 .build();
+
+		Option logFilePathOption = Option.builder("l").argName("log file path")
+                .hasArg()
+                .desc("the port number of the servers listener")
+                .type(Integer.TYPE)
+                .build();
 		
 		Options options = new Options();
 		options.addOption(verboseOption);
 		options.addOption(serverPortOption);
+		options.addOption(logFilePathOption);
 		
 		CommandLine line = null;
 		
@@ -611,18 +580,22 @@ public class Client {
 	        line = parser.parse( options, args );
 	        
 	        if( line.hasOption("verbose")) {
-		        verbose = true;
+	        	verboseLevel = 5;
 		    }
 	        
 	        if( line.hasOption("p")) {
 		        serverPort = Integer.parseInt(line.getOptionValue("p"));
 		    }
+	        
+	        if( line.hasOption("l")) {
+	        	logFilePath = line.getOptionValue("l");
+	        }
 	    } catch( ParseException exp ) {
-	    	System.err.println( "Command line argument parsing failed.  Reason: " + exp.getMessage() );
+	    	log.log(0, "Command line argument parsing failed.  Reason: " + exp.getMessage() );
 		    System.exit(1);
 	    }
 	    
-	    Client client = new Client(serverPort, verbose);
+	    Client client = new Client(serverPort,verboseLevel,logFilePath);
 	    
 	    
 	    // Get the positional arguments and perform a transaction if one is specified
@@ -632,7 +605,7 @@ public class Client {
 			try {
 				client.setServerAddress(InetAddress.getByName(positionalArgs[0]));
 			} catch (UnknownHostException e) {
-				System.out.println("Invalid server: \"" + positionalArgs[0] + "\"");
+				log.log(0, "Invalid server: \"" + positionalArgs[0] + "\"");
 			}
 		} else if (positionalArgs.length == 2) {
 			// Source and destination files specified
@@ -640,7 +613,7 @@ public class Client {
 			System.exit(0);
 		} else if (positionalArgs.length > 2) {
 			// Too many arguments
-			System.out.println("Too many files specified, entering interactive mode.");
+			log.log(0,"Too many files specified, entering interactive mode.");
 		}
 
 		// Create and start console UI thread
@@ -648,6 +621,7 @@ public class Client {
 				Map.entry("shutdown", client::shutdown),
 				Map.entry("verbose", client::setVerboseCmd),
 				Map.entry("quiet", client::setQuietCmd),
+				Map.entry("logfile", client::setLogfileCmd),
 				Map.entry("put", client::putCmd),
 				Map.entry("get", client::getCmd),
 				Map.entry("connect", client::connectCmd),
