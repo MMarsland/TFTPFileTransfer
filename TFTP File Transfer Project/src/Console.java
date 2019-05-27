@@ -39,7 +39,7 @@ public class Console implements Runnable, Closeable {
 	private FileInputStream inputStream;
 	
 	/**
-	 * The reader used to read data from stdin.
+	 * The reader used to read data from the input file.
 	 */
 	private BufferedReader reader;
 	
@@ -59,7 +59,8 @@ public class Console implements Runnable, Closeable {
 	private String prompt;
 	
 	/**
-	 * Create a Console with a given Map of commands using stdin and stdout.
+	 * Create a Console with a given Map of commands, input file and output
+	 * streams.
 	 * 
 	 * @param commands The Map of command and their names for this console
 	 * @param input The input stream for this console
@@ -68,10 +69,10 @@ public class Console implements Runnable, Closeable {
 	 * @throws IOException 
 	 */
 	public Console(Map<String, CommandCallback> commands, FileDescriptor input, 
-			OutputStream output, OutputStream error)
+			OutputStream output, OutputStream error, String prompt)
 	{
 		this.commands = commands;
-		this.prompt = ">> ";
+		this.prompt = prompt;
 		
 		// Output is wrapped in a FileInputStream so that the input stream can
 		// be closed from another thread, causing the reader's readLine method
@@ -92,7 +93,7 @@ public class Console implements Runnable, Closeable {
 	 */
 	public Console(Map<String, CommandCallback> commands)
 	{
-		this(commands, FileDescriptor.in, System.out, System.err);
+		this(commands, FileDescriptor.in, System.out, System.err, ">> ");
 	}
 	
 	/**
