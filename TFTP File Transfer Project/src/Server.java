@@ -10,6 +10,7 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.util.Arrays;
 import java.util.Map;
 
@@ -171,7 +172,7 @@ abstract class RequestHandler implements Runnable {
 	
 	public abstract void run();
 	
-	public void printPacketInformation(String direction, String type, String filename, String mode, int block, int length) {
+	public void printPacketInformation(String direction, String type, String filename, TFTPPacket.TFTPMode mode, int block, int length) {
 		if (direction == "send") {
 			System.out.println("Sending Packet:");
 		} else {
@@ -181,8 +182,8 @@ abstract class RequestHandler implements Runnable {
 		if (filename.isEmpty()) {
 			System.out.println("	Filename: "+filename);
 		}
-		if (!mode.isEmpty()) {
-			System.out.println("	Mode: "+mode);
+		if (mode != null) {
+			System.out.println("	Mode: "+mode.toString());
 		}
 		if (block >= 0) {
 			System.out.println("	Block Number: "+block);
@@ -222,7 +223,9 @@ class ReadHandler extends RequestHandler implements Runnable {
 		//Set up the socket that will be used to send/receive packets to/from client
 		try { 
 			this.sendReceiveSocket = new DatagramSocket();
-			// Set Timeout for the socket! TODO
+			// Set Timeout for the socket!
+			sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
+			
 		} catch (SocketException se) { // Can't create the socket.
 			se.printStackTrace();
 			System.exit(1);
@@ -282,57 +285,20 @@ class ReadHandler extends RequestHandler implements Runnable {
 		    sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, clientAddress, clientTID);
 		    
 		    
-		    // TODO - Put the sending and receiving in a loop to allow for timeout/retransmit
-		    // TODO - Decide on logging for when a packet has to be repeatedly sent
 		    // Send data packet to client on Client TID
 		    if(this.verbose) {
 		    	printPacketInformation("send", "RRQ", this.filename, null, this.blockNum, len);
 			}
 		    
-		    try {
-	    		sendReceiveSocket.send(sendPacket);
-	    	} catch (IOException e) {
-	    		e.printStackTrace();
-    			System.exit(1);
-	    	}
+		    // SEND DATA
 		    
-			// Wait for ACK
-		    if(this.verbose) {
-				System.out.println("Waiting for ack packet...");
-			}
+		    // TODO - Put the sending and receiving in a loop to allow for timeout/retransmit
+		    // TODO - Decide on logging for when a packet has to be repeatedly sent
+		    successfullySendData(sendPacket, receivePacket);
+
+		    // END
 		    
-		    // Receive new packet into pre-created receivePacket to replace old data and information
-		    try {
-	    		sendReceiveSocket.receive(receivePacket);
-	    		// TODO - Catch Time_out exception and return to sending data! (Loop?)
-	    	} catch(IOException e) {
-	    		e.printStackTrace();
-    			System.exit(1);
-	    	}
-		    		    
-		    // Parse ACK for correctness
-		    TFTPPacket.ACK ackPacket = null;
-	    	try {
-				ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
-			} catch (IllegalArgumentException e) {
-				System.err.println("Wrong Packet Recieved. Reason: Not an ackPacket");
-				// TODO Ensure this is the correct procedure
-				e.printStackTrace();
-				System.exit(1);
-			}
-	    	
-	    	
-	    	if (!(ackPacket.getBlockNum() == this.blockNum)) {
-				// Incorrect ack (NEED TO HANDLE THIS DIFFERENTLY) TODO
-	    		try {
-	    			throw new IllegalArgumentException();
-	    		} catch (IllegalArgumentException e) {
-					System.err.println("Wrong ACK response. Reason: Incorrect block number");
-					System.exit(1);
-	    		}
-			}
-	    	
-	    	
+	    	// TODO Put this in for what's actually received every time? Logger?
 	    	if(this.verbose) {
 	    		printPacketInformation("receive", "ACK", null, null, this.blockNum, -1);
 			}
@@ -349,6 +315,65 @@ class ReadHandler extends RequestHandler implements Runnable {
 		sendReceiveSocket.close();
 		if (this.verbose) {
 			System.out.println("Closing Read Handler");
+		}
+	}
+	
+	public void successfullySendData(DatagramPacket sendPacket, DatagramPacket receivePacket) {
+		boolean successful = false;
+		
+		while (!successful) {
+			try {
+	    		sendReceiveSocket.send(sendPacket);
+	    	} catch (IOException e) {
+	    		e.printStackTrace();
+				System.exit(1);
+	    	}
+		    
+			// Wait for ACK
+		    //if(this.verbose) {
+			//	System.out.println("Waiting for ack packet...");
+			//}
+		    
+		    // Receive new packet into pre-created receivePacket to replace old data and information
+		    try {
+	    		sendReceiveSocket.receive(receivePacket);
+	    	} catch(SocketTimeoutException e) {
+	    		// TODO - Catch Time_out exception and return to sending data! (Loop?)
+	    		if (verbose) {
+	    			System.out.println("Timed out waiting for the ack. Resending Data");	
+	    		}
+	    		// Re-send the Data datagram packet.
+	    		continue;
+	    	} catch(IOException e) {
+	    		e.printStackTrace();
+				System.exit(1);
+	    	}
+		    
+		    // Got the receive packet! :)
+		    // Parse ACK for correctness
+		    TFTPPacket.ACK ackPacket = null;
+	    	try {
+				ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
+			} catch (IllegalArgumentException e) {
+				System.err.println("Wrong Packet Recieved. Reason: Not an ackPacket");
+				// TODO Ensure this is the correct procedure
+				e.printStackTrace();
+				System.exit(1);
+			}
+	    	
+	    	// Check to ensure it is the expected Ack
+	    	if (!(ackPacket.getBlockNum() == this.blockNum)) {
+	    		if (verbose) {
+	    			System.err.println("Wrong ACK response. Reason: Incorrect block number");
+	    		}	
+	    		// This could be an old duplicate or delayed ack. Resend data for the most recent ack recieved. i.e. this data
+			} else {
+				// This is the expected ack response! Successfully sent!
+				successful = true;
+			}
+		}
+		if(this.verbose) {
+	    	System.out.println("Successfully Sent Data and Received the Ack!");
 		}
 	}
 }
@@ -386,6 +411,8 @@ class WriteHandler extends RequestHandler implements Runnable {
 		//Set up the socket that will be used to send/receive packets to/from client
 		try { 
 			this.sendReceiveSocket = new DatagramSocket();
+			// Set Timeout for the socket!
+			sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
 		} catch (SocketException se) { // Can't create the socket.
 			se.printStackTrace();
 			System.exit(1);
@@ -401,16 +428,6 @@ class WriteHandler extends RequestHandler implements Runnable {
 		if(this.verbose) {
 			System.out.println("Handling Write Request");
 		}
-		// Send first Ack Package
-	    TFTPPacket.ACK ackPacket = new TFTPPacket.ACK(0);
-	    DatagramPacket sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, clientAddress, clientTID);
-	    // Send data packet to client on Client TID
-	    try {
-    		sendReceiveSocket.send(sendPacket);
-    	} catch (IOException e) {
-    		e.printStackTrace();
-			System.exit(1);
-    	}
 	    
 	    FileOutputStream fos = null;
 		try {
@@ -424,48 +441,34 @@ class WriteHandler extends RequestHandler implements Runnable {
 		}
 	    
 		byte[] data = new byte[TFTPPacket.MAX_SIZE];
-		DatagramPacket receivePacket;
-		TFTPPacket.DATA dataPacket = null;
+	    TFTPPacket.DATA dataPacket = null;
+		
 		int len = 699999; //TODO Fix
-		int blockNum = 699999; //TODO Fix
+		int blockNum = 0;
+		
 	    // Receive data and send acks
 		boolean moreToWrite = true;
-		while (moreToWrite) {
-			// Receive Data Packet
-		    data = new byte[TFTPPacket.MAX_SIZE];
-		    receivePacket = new DatagramPacket(data, data.length);
-		    try {
-	    		sendReceiveSocket.receive(receivePacket);
-	    	} catch(IOException e) {
-	    		e.printStackTrace();
-    			System.exit(1);
-	    	}
-		    
-			// Check Packet for correctness
-	    	try {
-				dataPacket = new TFTPPacket.DATA(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
-			} catch (IllegalArgumentException e) {
-				System.err.println("Incorrect Response. Reason: Expected Data.");
-				e.printStackTrace();
-				System.exit(1);
+		while (moreToWrite) {		    
+		    // print ack packet information
+		    if(this.verbose) {
+		    	printPacketInformation("send", "ACK", "", null, blockNum, -1);
 			}
-	    	// Definitely data :)
-			// Strip block number
+		    
+		    // Send ack and RECEIVE next DATA
+		    dataPacket = successfullyReceiveData(blockNum);
+		    
+		    // END
+		    
+		    if(this.verbose) {
+		    	printPacketInformation("recieved", "DATA", this.filename, this.mode, blockNum, len);
+			}
+		    
+		    
 		    blockNum = dataPacket.getBlockNum();
-			// Check size? Less than 512 == done
 		    len = dataPacket.getData().length;
 		    if (len < 512) {
 		    	moreToWrite = false;
 		    }
-
-		    if(this.verbose) { // TODO Replace with printPacketInformation
-				System.out.println("Received Packet:");
-				System.out.println("Packet Type: DATA");
-				System.out.println("Filename: "+this.filename);
-				System.out.println("Mode: "+this.mode);
-				System.out.println("Block Number: "+blockNum);
-				System.out.println("# of Bytes: "+len);
-			}
 		    
 			// Write into file
 		    try {
@@ -475,29 +478,20 @@ class WriteHandler extends RequestHandler implements Runnable {
 				e.printStackTrace();
 				System.exit(1);
 			}
-		    
-			// Send Acknowledgement packet with block number
-		    ackPacket = new TFTPPacket.ACK(blockNum);
-		    sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, clientAddress, clientTID);
-		    
-		    // Send ack packet to client on Client TID
-		    if(this.verbose) { // TODO Replace with printPacketInformation
-				System.out.println("Sending Packet:");
-				System.out.println("Packet Type: ACK");
-				// N/A System.out.println("Filename: "+this.filename);
-				// N/A System.out.println("Mode: "+this.Mode);
-				System.out.println("Block Number: "+blockNum);
-				// N/A System.out.println("# of Bytes: "+len);
-			}
-		    
-		    try {
-	    		sendReceiveSocket.send(sendPacket);
-	    	} catch (IOException e) {
-	    		e.printStackTrace();
-    			System.exit(1);
-	    	}
 		}
 		
+		// Send Last ack! TODO How does this know if it was received? What should we expect? Does it matter if this gets there? No way to check...
+	    TFTPPacket.ACK ackPacket = new TFTPPacket.ACK(blockNum);
+	    DatagramPacket sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, clientAddress, clientTID);
+		
+	    try {
+    		sendReceiveSocket.send(sendPacket);
+    	} catch (IOException e) {
+    		e.printStackTrace();
+			System.exit(1);
+    	}
+		
+	    // Done Writing! Close the file
 		try {
 			fos.flush();
 			fos.close();
@@ -518,9 +512,64 @@ class WriteHandler extends RequestHandler implements Runnable {
 			System.out.println("Closing Write Handler");
 		}
 	}
+	
+	
+	public TFTPPacket.DATA successfullyReceiveData(int blockNum) {
+		TFTPPacket.ACK ackPacket;
+	    DatagramPacket sendPacket;
+		DatagramPacket receivePacket;
+		// Receive Data Packet
+	    byte[] data = new byte[TFTPPacket.MAX_SIZE];
+	    receivePacket = new DatagramPacket(data, data.length);
+		// Loop until return.
+		while (true) {
+			
+			// Send Ack Packet
+		    ackPacket = new TFTPPacket.ACK(blockNum);
+		    sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, clientAddress, clientTID);
+		    
+			// Send the ack packet!
+		    try {
+	    		sendReceiveSocket.send(sendPacket);
+	    	} catch (IOException e) {
+	    		e.printStackTrace();
+    			System.exit(1);
+	    	}
+		    
+		    // Receive data!
+		    try {
+	    		sendReceiveSocket.receive(receivePacket);
+	    	} catch(SocketTimeoutException e) {
+	    		// TODO - Catch Time_out exception and return to sending data! (Loop?)
+	    		if (verbose) {
+	    			System.out.println("Timed out waiting for the data. Resending Ack");	
+	    		}
+	    		// Re-send the last ack packet.
+	    		continue;
+	    	} catch(IOException e) {
+	    		e.printStackTrace();
+    			System.exit(1);
+	    	}
+		    
+			// Check Packet for correctness
+		    TFTPPacket.DATA dataPacket = null;
+	    	try {
+				dataPacket = new TFTPPacket.DATA(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
+			} catch (IllegalArgumentException e) {
+				System.err.println("Incorrect Response. Reason: Expected Data.");
+				e.printStackTrace();
+				System.exit(1);
+			}
+	    	
+	    	// Definitely data :)
+			// Strip block number to ensure this is the next data block
+	    	if ((dataPacket.getBlockNum() == (blockNum+1))) {
+	    		// This is the correct next data block! Yay!
+	    		return dataPacket;
+	    	}
+		}
+	}
 }
-
-
 
 
 
