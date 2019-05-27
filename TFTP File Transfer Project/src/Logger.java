@@ -1,7 +1,9 @@
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.DatagramPacket;
 import java.nio.charset.Charset;
+import java.util.Arrays;
 
 //TODO Add logger close method to close the fileoutputstream
 public class Logger {
@@ -52,5 +54,33 @@ public class Logger {
 				else System.out.println(Content + " (Not Writing to Log file)");
 			}
 		}
+	}
+	
+	public void logPacket(int level, DatagramPacket datagram, TFTPPacket packet,
+			boolean received, String hostFriendlyName) {
+		
+		if (packet == null) {
+			try {
+				packet = TFTPPacket.parse(Arrays.copyOf(datagram.getData(),
+						datagram.getLength()));
+			} catch (IllegalArgumentException e) {
+				// ignore, packet remains null
+			}
+		}
+		
+		StringBuilder str = new StringBuilder();
+		
+		str.append(String.format("Packet %s %s:\n", 
+				((received) ? "received from" : "sent to"), hostFriendlyName));
+		str.append(String.format("\t%s: %s:%d\n", ((received) ? "From" : "To"),
+				datagram.getAddress(), datagram.getPort()));
+		str.append(String.format("\tLength: %d\n", datagram.getLength()));
+		if (packet != null) {
+			str.append(String.format("\tPacket: %s\n", packet.toString()));
+		} else {
+			str.append("\tNot a valid TFTP packet.");
+		}
+		
+		this.log(level, str.toString());
 	}
 }
