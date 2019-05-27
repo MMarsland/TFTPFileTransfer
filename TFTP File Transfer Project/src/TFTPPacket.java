@@ -30,7 +30,7 @@ public abstract class TFTPPacket {
 	public static final int MAX_BLOCK_NUM = 0xFFFF;
 	
 	/**
-	 * TFTP receive timeout in milliseconds
+	 * TFTP receive timeout before packet is assumed lost in milliseconds
 	 */
 	public static final int TFTP_TIMEOUT = 3000;
 	
@@ -39,6 +39,10 @@ public abstract class TFTPPacket {
 	 */
 	public static final int TFTP_DATA_TIMEOUT = 3500;
 	
+	/**
+	 * Number of retries before partner is assumed to be missing
+	 */
+	public static final int TFTP_NUM_RETRIES = 5;
 	
 	/**
 	 * Marshal the packet to the format to be transmitted on a network.
