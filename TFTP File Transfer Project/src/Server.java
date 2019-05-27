@@ -643,20 +643,18 @@ public class Server {
 	        System.exit(1);
 	    }
 		
-<<<<<<< HEAD
 	    // Start Server Listener Thread
 		ServerListener listener = new ServerListener(serverPort, verbose);
 		Thread listenerThread = new Thread(listener);
 		listenerThread.start();
-=======
+
 		// Create server instance and start it
 	    Server server = new Server(serverPort, verbose);
->>>>>>> branch 'master' of https://github.com/MMarsland/TFTPFileTransfer.git
 		
 		if(verbose) {
 			System.out.println("Listening to client on port " + serverPort);
 		}
-<<<<<<< HEAD
+
 	
 		
 		// Start UI Thread
@@ -731,7 +729,7 @@ public class Server {
 				System.out.println("Invalid command.");
 			}
 		}
-=======
+
 
 
 		// Create and start console UI thread
@@ -747,6 +745,5 @@ public class Server {
 
 		Thread consoleThread = new Thread(console);
 		consoleThread.start();
->>>>>>> branch 'master' of https://github.com/MMarsland/TFTPFileTransfer.git
 	}
 }
