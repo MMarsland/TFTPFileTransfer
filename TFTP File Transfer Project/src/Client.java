@@ -98,7 +98,8 @@ public class Client {
 			// Receive Data Packet
 			log.log(5,"Waiting for data packet");
 			
-			data = new byte[TFTPPacket.MAX_SIZE];
+			acknowledged = false;
+			
 			receivePacket = new DatagramPacket(data, data.length);
 			
 			while(!acknowledged) {
