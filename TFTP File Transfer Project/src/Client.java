@@ -133,6 +133,9 @@ public class Client {
 						    	return;
 							}
 							// Re-send the last ACK packet
+							
+							log.logPacket(5, sendPacket, ackPacket, false, "server");
+							
 							try {
 								sendReceiveSocket.send(sendPacket);
 							} catch(IOException e2) {
@@ -171,12 +174,9 @@ public class Client {
 			if (len < 512) {
 				moreToWrite = false;
 			}
-			log.log(5,
-				"Received Packet:\n"
-				+ "Packet Type: DATA\n"
-				+ "Filename: "+filename+"\n"
-				+ "Block Number: "+blockNum+"\n"
-				+ "# of Bytes: "+len);
+			
+			log.logPacket(5, receivePacket, dataPacket, true, "server");
+			
 			// Write into file
 			if(!duplicateData) {
 				try {
@@ -199,9 +199,7 @@ public class Client {
 			log.log(5,"Last block number updated");
 			
 			// Send ack packet to server on serverPort
-			log.log(5,"Sending Packet:\n"
-				+ "Packet Type: ACK"
-				+ "Block Number: "+blockNum);
+			log.logPacket(5, sendPacket, ackPacket, false, "server");
 			
 			try {
 				sendReceiveSocket.send(sendPacket);
@@ -288,6 +286,8 @@ public class Client {
 			System.exit(0);
 		}
     	
+    	log.logPacket(5, receivePacket, ackPacket, true, "server");
+    	
     	if (ackPacket.getBlockNum() == 0 ) {
 			// Correct acks
 			log.log(5,"Recieved ACK for block #0.  Starting data transfer...");
@@ -331,11 +331,7 @@ public class Client {
 		    	dataPacket = new TFTPPacket.DATA(blockNum, data);
 		    	sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, serverAddress, replyPort);
 		    	
-			    log.log(5,"Sending Packet:"
-			    	+ "Packet Type: DATA"
-			    	+ "Filename: "+filename
-			    	+ "Block Number: "+blockNum
-			    	+ "# of Bytes: "+len);
+		    	log.logPacket(5, sendPacket, dataPacket, false, "server");
 		    	
 		    	try {
 		    		sendReceiveSocket.send(sendPacket);
@@ -371,6 +367,8 @@ public class Client {
 				    		return;
 				    	}
 		    			log.log(5,"Re-sending last DATA packet.");
+		    			
+		    			log.logPacket(5, sendPacket, ackPacket, false, "server");
 		    			try {
 				    		sendReceiveSocket.send(sendPacket);
 				    		sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_DATA_TIMEOUT);
@@ -397,6 +395,7 @@ public class Client {
 				e.printStackTrace();
 				System.exit(0);
 			}
+	    	log.logPacket(5, receivePacket, ackPacket, true, "server");
 	    	if (ackPacket.getBlockNum() == blockNum ) {
 				// Correct ack
 	    		duplicateAck = false;
@@ -466,11 +465,7 @@ public class Client {
 			TFTPPacket.RRQ readPacket = new TFTPPacket.RRQ(filepath, TFTPPacket.TFTPMode.NETASCII);
 			sendPacket = new DatagramPacket(readPacket.toBytes(), readPacket.size(), serverAddress, serverPort);
 			
-			log.log(5,"Sending Packet"
-				+"Packet Type: RRQ"
-				+"Filename: "+filepath
-				+"Mode: "+readPacket.getMode().toString()
-				+"# of Bytes: "+(sendPacket.getData().length-4));
+			log.logPacket(5, sendPacket, readPacket, false, "server");
 
 			try {
 				sendReceiveSocket.send(sendPacket);
@@ -499,11 +494,7 @@ public class Client {
 			TFTPPacket.WRQ writePacket = new TFTPPacket.WRQ(filepath, TFTPPacket.TFTPMode.parseFromString("netascii"));
 			sendPacket = new DatagramPacket(writePacket.toBytes(), writePacket.size(), serverAddress, serverPort);
 			
-			log.log(5,"Sending Packet"
-				+"Packet Type: RRQ"
-				+"Filename: "+filepath
-				+"Mode: "+writePacket.getMode().toString()
-				+"# of Bytes: "+(sendPacket.getData().length-4));
+			log.logPacket(5, sendPacket, writePacket, false, "server");
 
 			try {
 				sendReceiveSocket.send(sendPacket);
@@ -588,11 +579,7 @@ public class Client {
 		TFTPPacket.WRQ writePacket = new TFTPPacket.WRQ(remoteFile, TFTPPacket.TFTPMode.NETASCII);
 		DatagramPacket request = new DatagramPacket(writePacket.toBytes(), writePacket.size(), serverAddress, serverPort);
 		
-		log.log(5,"Sending Packet"
-			+"Packet Type: RRQ"
-			+"Filename: " + remoteFile
-			+"Mode: " + writePacket.getMode().toString()
-			+"# of Bytes: " + (request.getData().length - 4));
+		log.logPacket(5, request, writePacket, false, "server");
 		
 		try {
 			sendReceiveSocket.send(request);
@@ -636,11 +623,7 @@ public class Client {
 		TFTPPacket.RRQ readPacket = new TFTPPacket.RRQ(args[1], TFTPPacket.TFTPMode.NETASCII);
 		DatagramPacket request = new DatagramPacket(readPacket.toBytes(), readPacket.size(), serverAddress, serverPort);
 		
-			log.log(5,"Sending Packet"
-				+"Packet Type: RRQ"
-				+"Filename: " + args[1]
-				+"Mode: " + readPacket.getMode().toString()
-				+"# of Bytes: " + (request.getData().length - 4));
+		log.logPacket(5, request, readPacket, false, "server");
 		
 		try {
 			sendReceiveSocket.send(request);
