@@ -52,6 +52,7 @@ public class Client {
 		
 		try {	//Setting up the socket that will send/receive packets
 			sendReceiveSocket = new DatagramSocket();
+			sendReceiveSocket.setSoTimeout(5000);
 		} catch(SocketException se) { //If the socket can't be created
 			se.printStackTrace();
 			System.exit(1);
@@ -77,15 +78,8 @@ public class Client {
 			return;
 		}
 		
-		// Attempting to disable the socket timeout
-		try {
-			sendReceiveSocket.setSoTimeout(0);
-		} catch(SocketException se) {
-			log.log(0,"Timeout could not be disabled.  Continuing proccess.\nProcess may terminate due to SocketTimeoutExceptions may be encountered.");
-		}
-		
 		TFTPPacket.ACK ackPacket = new TFTPPacket.ACK(0);
-		DatagramPacket sendPacket;
+		DatagramPacket sendPacket = null;
 		byte[] data = new byte[TFTPPacket.MAX_SIZE];
 		DatagramPacket receivePacket;
 		TFTPPacket.DATA dataPacket = null;
@@ -98,6 +92,8 @@ public class Client {
 		// Receive data and send acks
 		boolean moreToWrite = true;
 		boolean duplicateData = false;
+		boolean acknowledged = false;
+		int resendCount = 0;
 		while (moreToWrite) {
 			// Receive Data Packet
 			log.log(5,"Waiting for data packet");
@@ -105,12 +101,51 @@ public class Client {
 			data = new byte[TFTPPacket.MAX_SIZE];
 			receivePacket = new DatagramPacket(data, data.length);
 			
-			try {
-				sendReceiveSocket.receive(receivePacket);
-			} catch(IOException e) {
-				e.printStackTrace();
-				System.exit(1);
+			while(!acknowledged) {
+				try {
+					sendReceiveSocket.receive(receivePacket);
+					acknowledged = true;
+				} catch(IOException e1) {
+					// Checks if the socket timed out
+					if(e1 instanceof SocketTimeoutException) {
+						//If no data blocks have been received yet, send Client back to console to resend request
+						if(blockNum == 0) {
+							log.log(0,  "Timeout while waiting for first DATA packet.  Client returning to console.");
+							try {
+								fos.flush();
+								fos.close();
+							} catch (IOException e) {
+								e.printStackTrace();
+								System.exit(1);
+							}
+							return;
+						} else {
+							if(resendCount > 4) {
+						    	log.log(0,"ACK has been re-sent 5 times.  Aborting file transfer.");
+						    	try {
+						    		fos.flush();
+									fos.close();
+								} catch (IOException e) {
+									e.printStackTrace();
+									System.exit(1);
+								}
+						    	return;
+							}
+							// Re-send the last ACK packet
+							try {
+								sendReceiveSocket.send(sendPacket);
+							} catch(IOException e2) {
+								e2.printStackTrace();
+								System.exit(1);
+							}
+						}
+					} else {
+						e1.printStackTrace();
+						System.exit(1);
+					}
+				}
 			}
+			
 			log.log(5,"Recieved packet from server");
 			// Check Packet for correctness
 		    
@@ -192,6 +227,7 @@ public class Client {
 		
 	}
 	
+	
 	/**
 	 * Method to write a file to the server.  The Client must already have the server
 	 * address and port #.
@@ -201,6 +237,7 @@ public class Client {
 	public void write(String filename)
 	{
 		
+		//Tries to open the file.  If the filename is invalid, cancels the request.
 		FileInputStream fis = null;
 		try {
 			fis = new FileInputStream(filename);
@@ -210,6 +247,14 @@ public class Client {
 		} 
 		log.log(5,"Successfully opened: "+filename);
 		
+		// Initializing the socket timeout.  If it cannot be set, prints an error message but
+    	// continues running.
+    	try {
+			sendReceiveSocket.setSoTimeout(5000);
+		} catch(SocketException se) {
+			log.log(0,"Socket timeout could not be set.  Continuing transfer without socket timeout.");
+		}
+    	
 		TFTPPacket.DATA dataPacket;
 	    DatagramPacket receivePacket;
 	    DatagramPacket sendPacket = null;
@@ -220,11 +265,22 @@ public class Client {
 		//Receiving the first ACK packet and stripping the new port number
 	    receivePacket = new DatagramPacket(data, data.length);
 	    try {
-    		sendReceiveSocket.receive(receivePacket);
-    	} catch(IOException e) {
-    		e.printStackTrace();
-			System.exit(1);
-    	}
+	    	sendReceiveSocket.receive(receivePacket);
+	    } catch(IOException e1) {
+	    	if(e1 instanceof SocketTimeoutException) {
+	    		log.log(0,  "Socket timeout while waiting for first ACK packet.  Returning to console.");
+	    		try {
+	    			fis.close();
+	    		} catch(IOException e2) {
+	    			e2.printStackTrace();
+	    			System.exit(1);
+	    		}
+	    		return;
+	    	} else {
+	    	e1.printStackTrace();
+	    	System.exit(1);
+	    	}
+	    }
 	    
 		log.log(5,"Recieved packet from server.");
 	    
@@ -251,14 +307,6 @@ public class Client {
     			e.printStackTrace();
     		}
     		throw new IllegalArgumentException();
-		}
-    	
-    	// Initializing the socket timeout.  If it cannot be set, prints an error message but
-    	// continues running.
-    	try {
-			sendReceiveSocket.setSoTimeout(5000);
-		} catch(SocketException se) {
-			log.log(0,"Socket timeout could not be set.  Continuing transfer without socket timeout.");
 		}
     	
 		int replyPort = receivePacket.getPort();
@@ -629,6 +677,8 @@ public class Client {
 		c.println("quiet\n\tDisable debugging output.");
 	}
 
+
+	
 	public static void main(String[] args) {
 		log.log(5,"Setting up Client...");
 		
