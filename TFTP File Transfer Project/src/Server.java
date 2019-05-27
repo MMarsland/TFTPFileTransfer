@@ -21,558 +21,6 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 
-
-
-
-/**
- * ErrorSimListener class handles incoming communications from the client 
- * and creates the appropriate handler threads to handle the requests.
- */
-class ServerListener implements Runnable {
-	private DatagramSocket  receiveSocket;
-	private int listenerPort;
-	private boolean verbose;
-	
-	/**
-	 * Constructor for the SeverListener class.
-	 * @param listenerPort The port that will listen to requests from the client.
-	 * @param verbose true enables verbose mode to output debug info, false disables verbose
-	 * mode so less information is output.
-	 */
-	public ServerListener(int listenerPort, boolean verbose) {
-		this.listenerPort = listenerPort;
-		this.verbose = verbose;
-		
-		// Set up the socket that will be used to receive packets from clients (or error simulators)
-		try { 
-			receiveSocket = new DatagramSocket(listenerPort);
-		} catch (SocketException se) { // Can't create the socket.
-			se.printStackTrace();
-			System.exit(1);
-	    }
-	}
-	
-	/**
-	 * Enable/disables verbose mode on the listener thread
-	 * @param mode true enables verbose mode, false disables it
-	 */
-	public void setVerbose(boolean mode) {
-		verbose = mode;
-	}
-	
-	/**
-	 * Determine if listener thread is in verbose mode
-	 * @return Whether the listener thread is in verbose mode
-	 */
-	public boolean getVerbose() {
-		return verbose;
-	}
-	
-	/**
-	 * Get the port that the listener is listening on
-	 * @return The port that the listener is listening on
-	 */
-	public int getPort() {
-		return listenerPort;
-	}
-	
-	/**
-	 * The run method required to implement Runnable.
-	 */
-	public void run(){
-		byte data[] = new byte[TFTPPacket.MAX_SIZE];
-	    DatagramPacket receivePacket = new DatagramPacket(data, data.length);
-	    
-	    while(!Thread.interrupted()) {
-	    	if(verbose) {
-	    		System.out.println("Listening for packets on port "+this.listenerPort+"...");
-	    	}
-	    	
-	    	// Wait for a packet to come in from the client.
-	    	try { 	    		
-	    		receiveSocket.receive(receivePacket);
-	    	} catch(IOException e) {
-	    		if(e.getMessage().equals("socket closed")) {
-	    			System.exit(1);
-	    		}
-	    		e.printStackTrace();
-    			System.exit(1);
-	    	}
-	    
-	    	if(verbose) {
-	    		System.out.println("New Request Received:");
-	    	}
-	    	
-	    	// Parse the packet to determine the type of handler required
-	    	TFTPPacket request = null;
-	    	try {
-				request = TFTPPacket.parse(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
-			} catch (IllegalArgumentException e) {
-				e.printStackTrace();
-				System.exit(1);
-			}
-	    	// Create a handler thread
-			if (request instanceof TFTPPacket.RRQ) {
-				if (!verbose) {
-					System.out.println("Received a read request.");
-				} else {
-					System.out.println("Creating a read handler for this request.");
-				}
-				ReadHandler handler = new ReadHandler(receivePacket, (TFTPPacket.RRQ) request, verbose);
-				Thread handlerThread = new Thread(handler);
-				handlerThread.start();
-	    	} else if (request instanceof TFTPPacket.WRQ) {
-	    		if (!verbose) {
-					System.out.println("Received a write request.");
-				} else {
-					System.out.println("Creating a write handler for this request.");
-				}
-	    		WriteHandler handler = new WriteHandler(receivePacket, (TFTPPacket.WRQ) request, verbose);
-				Thread handlerThread = new Thread(handler);
-				handlerThread.start();
-	    	} else {
-	    		// Not the right first request type..
-	    		try {
-	    			throw new IllegalArgumentException();
-	    		} catch (IllegalArgumentException e) {
-	    			System.err.println("Error: Unexpected first request packet. Reason: Not a read or write request. Solution: Ignoring and proceeding.");
-	    		}
-	    		
-	    	}
-			
-	    	// Return to listening for new requests
-	    }
-	}
-	
-	/**
-	 * Closes the sockets used by the listener to clean up resources
-	 * and also cause the listener thread to exit
-	 */
-	public void close()
-	{
-	    receiveSocket.close();
-	}
-}
-
-
-
-
-/**
- * Abstract Class for Request Handlers. Allows inheritance for ReadHandler 
- * and Write Handler for code simplification and cleaner structure
- */
-abstract class RequestHandler implements Runnable {
-	protected DatagramSocket sendReceiveSocket;
-	protected DatagramPacket receivePacket;
-	protected boolean verbose;
-	protected int clientTID;
-	protected InetAddress clientAddress;
-	protected String filename;
-	
-	
-	public abstract void run();
-	
-	public void printPacketInformation(String direction, String type, String filename, TFTPPacket.TFTPMode mode, int block, int length) {
-		if (direction == "send") {
-			System.out.println("Sending Packet:");
-		} else {
-			System.out.println("Received Packet:");
-		}
-		System.out.println("	Packet Type: "+type);
-		if (filename.isEmpty()) {
-			System.out.println("	Filename: "+filename);
-		}
-		if (mode != null) {
-			System.out.println("	Mode: "+mode.toString());
-		}
-		if (block >= 0) {
-			System.out.println("	Block Number: "+block);
-		}
-		if (length >= 0) {
-			System.out.println("	# of Bytes: "+length);
-		}
-	}
-}
-
-/**
- * Read Handler Class for handling Read Requests
- */
-class ReadHandler extends RequestHandler implements Runnable {
-
-	protected TFTPPacket.RRQ request;
-	protected int blockNum = 0;
-	
-	/**
-	 * Constructor for the ReadHandler class.
-	 * @param receivePacket The DatagramPacket received for this request
-	 * @param request The formed TFTPPacket for the read request
-	 * @param verbose true enables verbose mode to output debug info, false disables verbose
-	 * mode so less information is output.
-	 */
-	public ReadHandler(DatagramPacket receivePacket, TFTPPacket.RRQ request, boolean verbose) {
-		if(verbose) {
-			System.out.println("Setting up read handler.");
-		}
-		this.receivePacket = receivePacket;
-		this.request = request;
-		this.verbose = verbose;
-		this.clientTID = this.receivePacket.getPort();
-		this.clientAddress = this.receivePacket.getAddress();
-		this.filename =  this.request.getFilename();
-		
-		//Set up the socket that will be used to send/receive packets to/from client
-		try { 
-			this.sendReceiveSocket = new DatagramSocket();
-			// Set Timeout for the socket!
-			sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
-			
-		} catch (SocketException se) { // Can't create the socket.
-			se.printStackTrace();
-			System.exit(1);
-	    }
-	
-	}
-
-	/**
-	 * The run method required to implement Runnable.
-	 */
-	public void run(){
-		if(this.verbose) {
-			System.out.println("Handling read request.");
-		}
-	    
-		FileInputStream fis = null;
-		try {
-			fis = new FileInputStream(this.filename);
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-			System.exit(1);
-		} 
-		if(this.verbose) {
-			System.out.println("Successfully opened: "+this.filename);
-		}
-		
-		TFTPPacket.DATA dataPacket;
-	    DatagramPacket sendPacket;
-	    byte[] data = new byte[512];
-	    byte[] receiveData = new byte[TFTPPacket.MAX_SIZE];
-	    int len = 69; 
-	    DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
-	    
-		boolean moreToRead = true;
-		while (moreToRead) {
-			// Read data from file into data packet
-		    this.blockNum++;
-		    this.blockNum = this.blockNum & 0xFFFF;
-		    try {
-		    	if ((len=fis.read(data,0,512)) < 512) {
-		    		moreToRead = false;
-		    		if (len == -1) {
-		    			// End of file reached exactly. Send 0 bytes of data.
-		    			len = 0;
-		    		}
-					fis.close();
-		    	}
-		    	// Shrink wrap size based on the # of bytes read from the file
-		    	data = Arrays.copyOf(data, len);
-			} catch (IOException e) {
-				e.printStackTrace();
-				System.exit(1);
-			}
-		    
-			// Assemble data packet
-		    dataPacket = new TFTPPacket.DATA(this.blockNum, data);
-		    sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, clientAddress, clientTID);
-		    
-		    
-		    // Send data packet to client on Client TID
-		    if(this.verbose) {
-		    	printPacketInformation("send", "RRQ", this.filename, null, this.blockNum, len);
-			}
-		    
-		    // SEND DATA
-		    
-		    // TODO - Put the sending and receiving in a loop to allow for timeout/retransmit
-		    // TODO - Decide on logging for when a packet has to be repeatedly sent
-		    successfullySendData(sendPacket, receivePacket);
-
-		    // END
-		    
-	    	// TODO Put this in for what's actually received every time? Logger?
-	    	if(this.verbose) {
-	    		printPacketInformation("receive", "ACK", null, null, this.blockNum, -1);
-			}
-	    	
-	    	//Continue...
-		}
-		// All data is sent and last ACK received,
-		// Close socket, quit
-		if(this.verbose) {
-			System.out.println("Data Transefer complete! Closing socket.");
-		} else {
-			System.out.println("Successfully completed a read request.");
-		}
-		sendReceiveSocket.close();
-		if (this.verbose) {
-			System.out.println("Closing Read Handler");
-		}
-	}
-	
-	public void successfullySendData(DatagramPacket sendPacket, DatagramPacket receivePacket) {
-		boolean successful = false;
-		
-		while (!successful) {
-			try {
-	    		sendReceiveSocket.send(sendPacket);
-	    	} catch (IOException e) {
-	    		e.printStackTrace();
-				System.exit(1);
-	    	}
-		    
-			// Wait for ACK
-		    //if(this.verbose) {
-			//	System.out.println("Waiting for ack packet...");
-			//}
-		    
-		    // Receive new packet into pre-created receivePacket to replace old data and information
-		    try {
-	    		sendReceiveSocket.receive(receivePacket);
-	    	} catch(SocketTimeoutException e) {
-	    		// TODO - Catch Time_out exception and return to sending data! (Loop?)
-	    		if (verbose) {
-	    			System.out.println("Timed out waiting for the ack. Resending Data");	
-	    		}
-	    		// Re-send the Data datagram packet.
-	    		continue;
-	    	} catch(IOException e) {
-	    		e.printStackTrace();
-				System.exit(1);
-	    	}
-		    
-		    // Got the receive packet! :)
-		    // Parse ACK for correctness
-		    TFTPPacket.ACK ackPacket = null;
-	    	try {
-				ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
-			} catch (IllegalArgumentException e) {
-				System.err.println("Wrong Packet Recieved. Reason: Not an ackPacket");
-				// TODO Ensure this is the correct procedure
-				e.printStackTrace();
-				System.exit(1);
-			}
-	    	
-	    	// Check to ensure it is the expected Ack
-	    	if (!(ackPacket.getBlockNum() == this.blockNum)) {
-	    		if (verbose) {
-	    			System.err.println("Wrong ACK response. Reason: Incorrect block number");
-	    		}	
-	    		// This could be an old duplicate or delayed ack. Resend data for the most recent ack recieved. i.e. this data
-			} else {
-				// This is the expected ack response! Successfully sent!
-				successful = true;
-			}
-		}
-		if(this.verbose) {
-	    	System.out.println("Successfully Sent Data and Received the Ack!");
-		}
-	}
-}
-
-
-
-
-/**
- * Write Handler Class for handling Write Requests
- */
-class WriteHandler extends RequestHandler implements Runnable {
-
-	protected TFTPPacket.WRQ request;
-	protected TFTPPacket.TFTPMode mode;
-	
-	/**
-	 * Constructor for the WriteHandler class.
-	 * @param receivePacket The DatagramPacket received for this request
-	 * @param request The formed TFTPPacket for the write request
-	 * @param verbose true enables verbose mode to output debug info, false disables verbose
-	 * mode so less information is output.
-	 */
-	public WriteHandler(DatagramPacket receivePacket, TFTPPacket.WRQ request, boolean verbose) {
-		if(verbose) {
-			System.out.println("Setting up Write Handler");
-		}
-		this.receivePacket = receivePacket;
-		this.request = request;
-		this.verbose = verbose;
-		this.clientTID = this.receivePacket.getPort();
-		this.clientAddress = this.receivePacket.getAddress();
-		this.filename =  this.request.getFilename();
-		this.mode = this.request.getMode();
-		
-		//Set up the socket that will be used to send/receive packets to/from client
-		try { 
-			this.sendReceiveSocket = new DatagramSocket();
-			// Set Timeout for the socket!
-			sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
-		} catch (SocketException se) { // Can't create the socket.
-			se.printStackTrace();
-			System.exit(1);
-	    }
-		
-		
-	}
-
-	/**
-	 * The run method required to implement Runnable.
-	 */
-	public void run(){
-		if(this.verbose) {
-			System.out.println("Handling Write Request");
-		}
-	    
-	    FileOutputStream fos = null;
-		try {
-			fos = new FileOutputStream(this.filename);
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-			System.exit(1);
-		} 
-		if(this.verbose) {
-			System.out.println("File ready to be written! filename: "+this.filename);
-		}
-	    
-		byte[] data = new byte[TFTPPacket.MAX_SIZE];
-	    TFTPPacket.DATA dataPacket = null;
-		
-		int len = 699999; //TODO Fix
-		int blockNum = 0;
-		
-	    // Receive data and send acks
-		boolean moreToWrite = true;
-		while (moreToWrite) {		    
-		    // print ack packet information
-		    if(this.verbose) {
-		    	printPacketInformation("send", "ACK", "", null, blockNum, -1);
-			}
-		    
-		    // Send ack and RECEIVE next DATA
-		    dataPacket = successfullyReceiveData(blockNum);
-		    
-		    // END
-		    
-		    if(this.verbose) {
-		    	printPacketInformation("recieved", "DATA", this.filename, this.mode, blockNum, len);
-			}
-		    
-		    
-		    blockNum = dataPacket.getBlockNum();
-		    len = dataPacket.getData().length;
-		    if (len < 512) {
-		    	moreToWrite = false;
-		    }
-		    
-			// Write into file
-		    try {
-				fos.write(dataPacket.getData(),0,dataPacket.getData().length);
-			} catch (IOException e) {
-				System.err.println("Failed to write data to file.");
-				e.printStackTrace();
-				System.exit(1);
-			}
-		}
-		
-		// Send Last ack! TODO How does this know if it was received? What should we expect? Does it matter if this gets there? No way to check...
-	    TFTPPacket.ACK ackPacket = new TFTPPacket.ACK(blockNum);
-	    DatagramPacket sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, clientAddress, clientTID);
-		
-	    try {
-    		sendReceiveSocket.send(sendPacket);
-    	} catch (IOException e) {
-    		e.printStackTrace();
-			System.exit(1);
-    	}
-		
-	    // Done Writing! Close the file
-		try {
-			fos.flush();
-			fos.close();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		
-		// All data received and writes performed and last ack sent
-		if(this.verbose) {
-			System.out.println("Write Request complete! Closing socket.");
-		} else {
-			System.out.println("Successfully completed a write request.");
-		}
-		// Close socket, quit
-		sendReceiveSocket.close();
-		if (this.verbose) {
-			System.out.println("Closing Write Handler");
-		}
-	}
-	
-	
-	public TFTPPacket.DATA successfullyReceiveData(int blockNum) {
-		TFTPPacket.ACK ackPacket;
-	    DatagramPacket sendPacket;
-		DatagramPacket receivePacket;
-		// Receive Data Packet
-	    byte[] data = new byte[TFTPPacket.MAX_SIZE];
-	    receivePacket = new DatagramPacket(data, data.length);
-		// Loop until return.
-		while (true) {
-			
-			// Send Ack Packet
-		    ackPacket = new TFTPPacket.ACK(blockNum);
-		    sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, clientAddress, clientTID);
-		    
-			// Send the ack packet!
-		    try {
-	    		sendReceiveSocket.send(sendPacket);
-	    	} catch (IOException e) {
-	    		e.printStackTrace();
-    			System.exit(1);
-	    	}
-		    
-		    // Receive data!
-		    try {
-	    		sendReceiveSocket.receive(receivePacket);
-	    	} catch(SocketTimeoutException e) {
-	    		// TODO - Catch Time_out exception and return to sending data! (Loop?)
-	    		if (verbose) {
-	    			System.out.println("Timed out waiting for the data. Resending Ack");	
-	    		}
-	    		// Re-send the last ack packet.
-	    		continue;
-	    	} catch(IOException e) {
-	    		e.printStackTrace();
-    			System.exit(1);
-	    	}
-		    
-			// Check Packet for correctness
-		    TFTPPacket.DATA dataPacket = null;
-	    	try {
-				dataPacket = new TFTPPacket.DATA(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
-			} catch (IllegalArgumentException e) {
-				System.err.println("Incorrect Response. Reason: Expected Data.");
-				e.printStackTrace();
-				System.exit(1);
-			}
-	    	
-	    	// Definitely data :)
-			// Strip block number to ensure this is the next data block
-	    	if ((dataPacket.getBlockNum() == (blockNum+1))) {
-	    		// This is the correct next data block! Yay!
-	    		return dataPacket;
-	    	}
-		}
-	}
-}
-
-
-
 /**
  * Server class handles the setup of the Server and acts as the UI thread.
  */
@@ -709,5 +157,609 @@ public class Server {
 
 		Thread consoleThread = new Thread(console);
 		consoleThread.start();
+	}
+}
+
+
+/**
+ * ErrorSimListener class handles incoming communications from the client 
+ * and creates the appropriate handler threads to handle the requests.
+ */
+class ServerListener implements Runnable {
+	private DatagramSocket  receiveSocket;
+	private int listenerPort;
+	private boolean verbose;
+	
+	/**
+	 * Constructor for the SeverListener class.
+	 * @param listenerPort The port that will listen to requests from the client.
+	 * @param verbose true enables verbose mode to output debug info, false disables verbose
+	 * mode so less information is output.
+	 */
+	public ServerListener(int listenerPort, boolean verbose) {
+		this.listenerPort = listenerPort;
+		this.verbose = verbose;
+		
+		// Set up the socket that will be used to receive packets from clients (or error simulators)
+		try { 
+			receiveSocket = new DatagramSocket(listenerPort);
+		} catch (SocketException se) { // Can't create the socket.
+			se.printStackTrace();
+			System.exit(1);
+	    }
+	}
+	
+	/**
+	 * Enable/disables verbose mode on the listener thread
+	 * @param mode true enables verbose mode, false disables it
+	 */
+	public void setVerbose(boolean mode) {
+		verbose = mode;
+	}
+	
+	/**
+	 * Determine if listener thread is in verbose mode
+	 * @return Whether the listener thread is in verbose mode
+	 */
+	public boolean getVerbose() {
+		return verbose;
+	}
+	
+	/**
+	 * Get the port that the listener is listening on
+	 * @return The port that the listener is listening on
+	 */
+	public int getPort() {
+		return listenerPort;
+	}
+	
+	/**
+	 * The run method required to implement Runnable.
+	 */
+	public void run(){
+		byte data[] = new byte[TFTPPacket.MAX_SIZE];
+	    DatagramPacket receivePacket = new DatagramPacket(data, data.length);
+	    
+	    while(!Thread.interrupted()) {
+	    	if(verbose) {
+	    		System.out.println("Listening for packets on port "+this.listenerPort+"...");
+	    	}
+	    	
+	    	// Wait for a packet to come in from the client.
+	    	try { 	    		
+	    		receiveSocket.receive(receivePacket);
+	    	} catch(IOException e) {
+	    		if(e.getMessage().equals("socket closed")) {
+	    			System.exit(1);
+	    		}
+	    		e.printStackTrace();
+    			System.exit(1);
+	    	}
+	    
+	    	if(verbose) {
+	    		System.out.println("New Request Received:");
+	    	}
+	    	
+	    	// Parse the packet to determine the type of handler required
+	    	TFTPPacket request = null;
+	    	try {
+				request = TFTPPacket.parse(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
+			} catch (IllegalArgumentException e) {
+				e.printStackTrace();
+				System.exit(1);
+			}
+	    	// Create a handler thread
+			if (request instanceof TFTPPacket.RRQ) {
+				if (!verbose) {
+					System.out.println("Received a read request.");
+				} else {
+					System.out.println("Creating a read handler for this request.");
+				}
+				ReadHandler handler = new ReadHandler(receivePacket, (TFTPPacket.RRQ) request, verbose);
+				Thread handlerThread = new Thread(handler);
+				handlerThread.start();
+	    	} else if (request instanceof TFTPPacket.WRQ) {
+	    		if (!verbose) {
+					System.out.println("Received a write request.");
+				} else {
+					System.out.println("Creating a write handler for this request.");
+				}
+	    		WriteHandler handler = new WriteHandler(receivePacket, (TFTPPacket.WRQ) request, verbose);
+				Thread handlerThread = new Thread(handler);
+				handlerThread.start();
+	    	} else {
+	    		// Not the right first request type..
+	    		try {
+	    			throw new IllegalArgumentException();
+	    		} catch (IllegalArgumentException e) {
+	    			System.err.println("Error: Unexpected first request packet. Reason: Not a read or write request. Solution: Ignoring and proceeding.");
+	    		}
+	    		
+	    	}
+			
+	    	// Return to listening for new requests
+	    }
+	}
+	
+	/**
+	 * Closes the sockets used by the listener to clean up resources
+	 * and also cause the listener thread to exit
+	 */
+	public void close()
+	{
+	    receiveSocket.close();
+	}
+}
+
+
+
+
+
+
+/**
+ * Abstract Class for Request Handlers. Allows inheritance for ReadHandler 
+ * and Write Handler for code simplification and cleaner structure
+ */
+abstract class RequestHandler implements Runnable {
+	protected DatagramSocket sendReceiveSocket;
+	protected DatagramPacket receivePacket;
+	protected boolean verbose;
+	protected int clientTID;
+	protected InetAddress clientAddress;
+	protected String filename;
+	
+	public abstract void run();
+	
+	public void printPacketInformation(String direction, String type, String filename, TFTPPacket.TFTPMode mode, int block, int length) {
+		if (direction == "send") {
+			System.out.println("Sending Packet:");
+		} else {
+			System.out.println("Received Packet:");
+		}
+		System.out.println("	Packet Type: "+type);
+		if (filename.isEmpty()) {
+			System.out.println("	Filename: "+filename);
+		}
+		if (mode != null) {
+			System.out.println("	Mode: "+mode.toString());
+		}
+		if (block >= 0) {
+			System.out.println("	Block Number: "+block);
+		}
+		if (length >= 0) {
+			System.out.println("	# of Bytes: "+length);
+		}
+	}
+}
+
+/**
+ * Read Handler Class for handling Read Requests
+ */
+class ReadHandler extends RequestHandler implements Runnable {
+
+	protected TFTPPacket.RRQ request;
+	protected int blockNum = 0;
+	
+	/**
+	 * Constructor for the ReadHandler class.
+	 * @param receivePacket The DatagramPacket received for this request
+	 * @param request The formed TFTPPacket for the read request
+	 * @param verbose true enables verbose mode to output debug info, false disables verbose
+	 * mode so less information is output.
+	 */
+	public ReadHandler(DatagramPacket receivePacket, TFTPPacket.RRQ request, boolean verbose) {
+		if(verbose) {
+			System.out.println("Setting up read handler.");
+		}
+		this.receivePacket = receivePacket;
+		this.request = request;
+		this.verbose = verbose;
+		this.clientTID = this.receivePacket.getPort();
+		this.clientAddress = this.receivePacket.getAddress();
+		this.filename =  this.request.getFilename();
+		
+		//Set up the socket that will be used to send/receive packets to/from client
+		try { 
+			this.sendReceiveSocket = new DatagramSocket();
+			// Set Timeout for the socket!
+			sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
+			
+		} catch (SocketException se) { // Can't create the socket.
+			se.printStackTrace();
+			System.exit(1);
+	    }
+	
+	}
+
+	/**
+	 * Continually sends data until the correct ack is received.
+	 * @param sendPacket
+	 * @param receivePacket
+	 */
+	// TODO - Properly implement timeout/re-send
+	public TFTPPacket.ACK successfullySendDataAndReceiveAck(TFTPPacket.DATA dataPacket) {
+		// Packet to Send
+		DatagramPacket sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, clientAddress, clientTID);
+		
+		//Packet to receive
+		byte[] receiveData = new byte[TFTPPacket.MAX_SIZE];
+	    DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+		TFTPPacket.ACK ackPacket = null;
+		
+		// The expected block number to receive. (Same block number)
+		int blockNum = dataPacket.getBlockNum();
+		int resendCount = 0;
+		long timeout = System.currentTimeMillis() + TFTPPacket.TFTP_DATA_TIMEOUT;
+		boolean sendData = true;
+		
+		// Set the socket's initial timeout to the generic value
+		try {
+			sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_DATA_TIMEOUT);
+    	} catch (SocketException e) {
+    		e.printStackTrace();
+			System.exit(1);
+    	}
+					
+		// Either going to return the correct ackPacket or give up and die.
+		while (true) {
+			// If this is the first send or if a re-send is required.
+			if (sendData) {
+				try {
+		    		sendReceiveSocket.send(sendPacket);
+		    	} catch (Exception e) {
+		    		e.printStackTrace();
+					System.exit(1);
+		    	}
+				// Don't re-send until requested
+				sendData = false;
+			}
+			
+			// Try to receive Ack Packet!
+			try {
+	    		sendReceiveSocket.receive(receivePacket);
+	    		// Received a packet.
+	    		
+	    		// ================= Parse the packet ======================
+		    	try {
+					ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
+				} catch (IllegalArgumentException e) {
+					System.err.println("Wrong Packet Recieved. Reason: Not an ackPacket");
+					e.printStackTrace();
+					System.exit(1);
+				}
+		    	if (ackPacket.getBlockNum() > blockNum) {
+					System.err.println("Error: Block number higher than current block number.  Aborting transfer.");
+					System.exit(1);
+				}
+		    	 else if(ackPacket.getBlockNum() < blockNum) {
+					// Duplicate ack
+		    		if (verbose) {
+		    			System.out.println("Wrong ACK response. Reason: Incorrect block number.  Ignoring ACK and waiting for another packet.");
+		    		}
+					int timeLeft = (int)(timeout - System.currentTimeMillis());
+					
+					if(timeLeft > 0) {
+						// Lower the timeout and loop back to listening (Without re-sending data)
+						try {
+							sendReceiveSocket.setSoTimeout(timeLeft);
+						} catch(SocketException e) {
+							e.printStackTrace();
+							System.exit(1);
+						}
+					} else {
+						// Overall timeout hit, move on to next re-send/receive attempt
+						throw new SocketTimeoutException();
+					}
+
+				} else if (ackPacket.getBlockNum() == blockNum ) {
+					// CORRECT ACK FOUND!
+		    		return ackPacket;
+				}
+		    	// =======================================================
+	    		
+	    		
+	    	} catch(SocketTimeoutException e) {
+	    		if (verbose) {
+	    			System.out.println("Socket timeout while waiting for ACK packet.");
+	    		}
+	    		
+    			if(resendCount >= 5) {
+		    		System.err.println("Data has been re-sent 5 times.  Aborting file transfer.");
+		    		e.printStackTrace();
+		    		System.exit(1);
+		    	} else {
+		    		// Re-send data.
+		    		if (verbose) {
+	    				System.out.println("Re-sending DATA packet.");
+	    			}
+	    			timeout = System.currentTimeMillis() + TFTPPacket.TFTP_DATA_TIMEOUT;
+	    			resendCount++;
+	    			sendData = true;
+		    	}
+	    	} catch(IOException e) {
+	    		e.printStackTrace();
+	    		System.exit(1);
+	    	}
+		}
+	}
+	
+	/**
+	 * The run method required to implement Runnable.
+	 */
+	public void run(){
+		if(this.verbose) {
+			System.out.println("Handling read request.");
+		}
+		
+		// =========================== Ready the file to be read ======================  
+		FileInputStream fis = null;
+		try {
+			fis = new FileInputStream(this.filename);
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+			System.exit(1);
+		} 
+		if(this.verbose) {
+			System.out.println("Successfully opened: "+this.filename);
+		}
+		// ============================================================================
+	    byte[] data = new byte[512];		
+		TFTPPacket.DATA dataPacket;
+	    TFTPPacket.ACK ackPacket;
+	    int len = 0;
+	    
+		boolean moreToRead = true;
+		while (moreToRead) {
+			this.blockNum++;
+		    this.blockNum = this.blockNum & 0xFFFF;
+			// ================ASSEMBLE DATA TO SEND=======================
+			// Read data from file into data packet
+		    try {
+		    	if ((len=fis.read(data,0,512)) < 512) {
+		    		moreToRead = false;
+		    		if (len == -1) {
+		    			// End of file reached exactly. Send 0 bytes of data.
+		    			len = 0;
+		    		}
+					fis.close();
+		    	}
+		    	// Shrink wrap size based on the # of bytes read from the file
+		    	data = Arrays.copyOf(data, len);
+			} catch (IOException e) {
+				e.printStackTrace();
+				System.exit(1);
+			}
+		    
+			// Assemble data packet
+		    dataPacket = new TFTPPacket.DATA(this.blockNum, data);
+		    // ===============================================================
+		    
+		    // ================SUCCESSFULLY SEND DATA=========================
+		    // Send data packet to client on Client TID
+		    if(this.verbose) {
+		    	printPacketInformation("send", "RRQ", this.filename, null, this.blockNum, len);
+			}
+		    
+		    // Send the data packet repeatedly and receive the correct ack! (Or error out!!!)
+		    ackPacket = successfullySendDataAndReceiveAck(dataPacket);
+		    
+	    	// TODO Put this in for what's actually received every time? Logger?
+	    	if(this.verbose) {
+	    		printPacketInformation("receive", "ACK", null, null, this.blockNum, -1);
+			}
+	    	//=================================================================
+	    	
+	    	//Continue to next block!
+		}
+		// All data is sent and last ACK received,
+		// Close socket, quit
+		if(this.verbose) {
+			System.out.println("Data Transefer complete! Closing socket.");
+		} else {
+			System.out.println("Successfully completed a read request.");
+		}
+		sendReceiveSocket.close();
+		if (this.verbose) {
+			System.out.println("Closing Read Handler");
+		}
+	}
+}
+
+/**
+ * Write Handler Class for handling Write Requests
+ */
+class WriteHandler extends RequestHandler implements Runnable {
+
+	protected TFTPPacket.WRQ request;
+	protected TFTPPacket.TFTPMode mode;
+	
+	/**
+	 * Constructor for the WriteHandler class.
+	 * @param receivePacket The DatagramPacket received for this request
+	 * @param request The formed TFTPPacket for the write request
+	 * @param verbose true enables verbose mode to output debug info, false disables verbose
+	 * mode so less information is output.
+	 */
+	public WriteHandler(DatagramPacket receivePacket, TFTPPacket.WRQ request, boolean verbose) {
+		if(verbose) {
+			System.out.println("Setting up Write Handler");
+		}
+		this.receivePacket = receivePacket;
+		this.request = request;
+		this.verbose = verbose;
+		this.clientTID = this.receivePacket.getPort();
+		this.clientAddress = this.receivePacket.getAddress();
+		this.filename =  this.request.getFilename();
+		this.mode = this.request.getMode();
+		
+		//Set up the socket that will be used to send/receive packets to/from client
+		try { 
+			this.sendReceiveSocket = new DatagramSocket();
+			// Set Timeout for the socket!
+			sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
+		} catch (SocketException se) { // Can't create the socket.
+			se.printStackTrace();
+			System.exit(1);
+	    }
+		
+		
+	}
+
+	// TODO - Properly implement timeout/resend
+	public TFTPPacket successfullyReceiveData(TFTPPacket genericSendPacket) {
+		int blockNum = ((TFTPPacket.ACK) genericSendPacket).getBlockNum();
+	    byte[] receiveData = new byte[TFTPPacket.MAX_SIZE];
+	    DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+	    DatagramPacket sendPacket = new DatagramPacket(genericSendPacket.toBytes(), genericSendPacket.toBytes().length, clientAddress, clientTID);
+		// Loop until return.
+		while (true) {
+			
+			// Send the ack packet!
+		    try {
+	    		sendReceiveSocket.send(sendPacket);
+	    	} catch (IOException e) {
+	    		e.printStackTrace();
+    			System.exit(1);
+	    	}
+		    
+		    // Receive data!
+		    try {
+	    		sendReceiveSocket.receive(receivePacket);
+	    	} catch(SocketTimeoutException e) {
+	    		// TODO - Catch Time_out exception and return to sending data! (Loop?)
+	    		if (verbose) {
+	    			System.out.println("Timed out waiting for the data. Resending Ack");	
+	    		}
+	    		// Re-send the last ack packet.
+	    		continue;
+	    	} catch(IOException e) {
+	    		e.printStackTrace();
+    			System.exit(1);
+	    	}
+		    
+			// Check Packet for correctness
+		    TFTPPacket.DATA dataPacket = null;
+	    	try {
+				dataPacket = new TFTPPacket.DATA(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
+			} catch (IllegalArgumentException e) {
+				System.err.println("Incorrect Response. Reason: Expected Data.");
+				e.printStackTrace();
+				System.exit(1);
+			}
+	    	
+	    	// Definitely data :)
+			// Strip block number to ensure this is the next data block
+	    	if ((dataPacket.getBlockNum() == (blockNum+1))) {
+	    		// This is the correct next data block! Yay!
+	    		return dataPacket;
+	    	}
+	    	// Send Again?... Well
+		}
+	}
+	
+	/**
+	 * The run method required to implement Runnable.
+	 */
+	public void run(){
+		if(this.verbose) {
+			System.out.println("Handling Write Request");
+		}
+	    
+		// ======================= Ready the file to be Written ==========================
+	    FileOutputStream fos = null;
+		try {
+			fos = new FileOutputStream(this.filename);
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+			System.exit(1);
+		} 
+		if(this.verbose) {
+			System.out.println("File ready to be written! filename: "+this.filename);
+		}
+		// ===============================================================================
+		
+		TFTPPacket.ACK ackPacket;
+	    DatagramPacket sendPacket;
+	    TFTPPacket.DATA dataPacket;
+	    
+		int len = 0;
+		int blockNum = 0;
+		
+	    // Send acks and receive data!
+		boolean moreToWrite = true;
+		while (moreToWrite) {	
+			// =============ASSEMBLE ACK TO SEND=======================
+			// Assemble
+		    ackPacket = new TFTPPacket.ACK(blockNum);
+			// ========================================================
+			
+		    // ============SUCCESSFULLY SEND ACK (AND RECEIVE DATA) ================
+		    // Print ack packet information
+		    if(this.verbose) {
+		    	printPacketInformation("send", "ACK", "", null, blockNum, -1);
+			}
+		    
+		    // Send ack and RECEIVE next DATA
+		    dataPacket = (TFTPPacket.DATA) successfullyReceiveData(ackPacket);
+		    
+		    if(this.verbose) {
+		    	printPacketInformation("recieved", "DATA", this.filename, this.mode, blockNum, len);
+			}
+		    // =====================================================================
+		    
+		    
+		    // =================== WRITE DATA INTO FILE ======================
+		    blockNum = dataPacket.getBlockNum();
+		    len = dataPacket.getData().length;
+		    if (len < 512) {
+		    	moreToWrite = false;
+		    }
+		    
+			// Write into file
+		    try {
+				fos.write(dataPacket.getData(),0,dataPacket.getData().length);
+			} catch (IOException e) {
+				System.err.println("Failed to write data to file.");
+				e.printStackTrace();
+				System.exit(1);
+			}
+		    // ===============================================================
+		    
+		    // Continue to packet
+		}
+		
+		// =============SEND LAST ACK==================
+		// Send Last ack and assume everything is fine! (Cause it actually is, the client just may not understand that right now..)
+	    ackPacket = new TFTPPacket.ACK(blockNum);
+	    sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, clientAddress, clientTID);
+		
+	    try {
+    		sendReceiveSocket.send(sendPacket);
+    	} catch (IOException e) {
+    		e.printStackTrace();
+			System.exit(1);
+    	}
+	    // =============================================
+		
+	    // Done Writing! Close the file
+		try {
+			fos.flush();
+			fos.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		// All data received and writes performed and last ack sent
+		if(this.verbose) {
+			System.out.println("Write Request complete! Closing socket.");
+		} else {
+			System.out.println("Successfully completed a write request.");
+		}
+		// Close socket, quit
+		sendReceiveSocket.close();
+		if (this.verbose) {
+			System.out.println("Closing Write Handler");
+		}
 	}
 }
