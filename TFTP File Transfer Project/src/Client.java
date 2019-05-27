@@ -69,6 +69,14 @@ public class Client {
 		
 		log.log(5,"Reading from server file");
 		
+		FileOutputStream fos = null;
+		try {
+			fos = new FileOutputStream(filename);
+		} catch (FileNotFoundException e) {
+			log.log(0, "Invalid file name: file not found.  Please re-enter a valid file name");
+			return;
+		}
+		
 		// Attempting to disable the socket timeout
 		try {
 			sendReceiveSocket.setSoTimeout(0);
@@ -84,13 +92,6 @@ public class Client {
 		int len = 0;
 		int blockNum = 0;
 		int lastBlock = 0;
-		FileOutputStream fos = null;
-		try {
-			fos = new FileOutputStream(filename);
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-			System.exit(0);
-		} 
 
 		log.log(5,"File ready to be written! filename: "+filename);
 		
@@ -204,8 +205,8 @@ public class Client {
 		try {
 			fis = new FileInputStream(filename);
 		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-			System.exit(0);
+			log.log(0, "Invalid file name: file not found.  Please re-enter command with a valid file name");
+			return;
 		} 
 		log.log(5,"Successfully opened: "+filename);
 		
@@ -243,6 +244,12 @@ public class Client {
 		} else {
 			// Incorrect ack
 			log.log(0,"Wrong ACK response. Incorrect block number");
+			try {
+    			fis.close();
+    		} catch (IOException e) {
+    			// TODO Auto-generated catch block
+    			e.printStackTrace();
+    		}
     		throw new IllegalArgumentException();
 		}
     	
@@ -361,8 +368,7 @@ public class Client {
 		// Close socket, quit
 		log.log(5,"File transfer complete!");
 	}
-	
-	
+		
 	public void buildRequest(String source, String dest)
 	{
 		/**
