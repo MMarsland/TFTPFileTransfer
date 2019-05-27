@@ -34,6 +34,11 @@ public abstract class TFTPPacket {
 	 */
 	public static final int TFTP_TIMEOUT = 3000;
 	
+	/**
+	 * TFTP timeout for re-sending DATA packets
+	 */
+	public static final int TFTP_DATA_TIMEOUT = 3500;
+	
 	
 	/**
 	 * Marshal the packet to the format to be transmitted on a network.
