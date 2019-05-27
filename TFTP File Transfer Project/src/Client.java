@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.net.*;
 import java.util.Arrays;
 import java.util.Map;
+import java.net.SocketTimeoutException;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -13,6 +14,15 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 
+/**
+ * A TFTP Client program for a client-server project
+ * 
+ * Follows TFTP standards, but cannot handle all errors.
+ * Currently handles: incorrect packet types, delayed/duplicated packets, lost packets
+ * 
+ * @author Scott Malonda
+ *
+ */
 
 public class Client {
 	/**
@@ -48,18 +58,32 @@ public class Client {
 		}
 	}
 	
+	/**
+	 * Method to read a file from the server.  The Client must already have the server
+	 * address and port #.
+	 * 
+	 * @param filename Filepath to the client-side file that will be written to
+	 */
 	public void read(String filename)
 	{
-		/**
-		 * Method to read a file from the server.  The Client must already have the
-		 * server address and port #.  Runs a loop that waits for a data packet, then
-		 * sends an ack packet back.
-		 */
 		
 		log.log(5,"Reading from server file");
 		
+		// Attempting to disable the socket timeout
+		try {
+			sendReceiveSocket.setSoTimeout(0);
+		} catch(SocketException se) {
+			log.log(0,"Timeout could not be disabled.  Continuing proccess.\nProcess may terminate due to SocketTimeoutExceptions may be encountered.");
+		}
+		
 		TFTPPacket.ACK ackPacket = new TFTPPacket.ACK(0);
 		DatagramPacket sendPacket;
+		byte[] data = new byte[TFTPPacket.MAX_SIZE];
+		DatagramPacket receivePacket;
+		TFTPPacket.DATA dataPacket = null;
+		int len = 0;
+		int blockNum = 0;
+		int lastBlock = 0;
 		FileOutputStream fos = null;
 		try {
 			fos = new FileOutputStream(filename);
@@ -70,19 +94,16 @@ public class Client {
 
 		log.log(5,"File ready to be written! filename: "+filename);
 		
-		byte[] data = new byte[TFTPPacket.MAX_SIZE];
-		DatagramPacket receivePacket;
-		TFTPPacket.DATA dataPacket = null;
-		int len = 699999;
-		int blockNum = 699999;
 		// Receive data and send acks
 		boolean moreToWrite = true;
+		boolean duplicateData = false;
 		while (moreToWrite) {
 			// Receive Data Packet
 			log.log(5,"Waiting for data packet");
 			
 			data = new byte[TFTPPacket.MAX_SIZE];
 			receivePacket = new DatagramPacket(data, data.length);
+			
 			try {
 				sendReceiveSocket.receive(receivePacket);
 			} catch(IOException e) {
@@ -103,6 +124,11 @@ public class Client {
 			// Strip block number & port
 			blockNum = dataPacket.getBlockNum();
 			int replyPort = receivePacket.getPort();
+			// Check if the received block is either duplicated or delayed.  If so, send an ACK 
+			// packet for it but don't write any of the data to the file.
+			if(blockNum < (lastBlock + 1)) {
+				duplicateData = true;
+			}
 			// Check size? Less than 512 == done
 			len = dataPacket.getData().length;
 			if (len < 512) {
@@ -115,20 +141,25 @@ public class Client {
 				+ "Block Number: "+blockNum+"\n"
 				+ "# of Bytes: "+len);
 			// Write into file
-			try {
-				fos.write(dataPacket.getData(),0,dataPacket.getData().length);
-			} catch (IOException e) {
-				log.log(0,"Failed to write data to file!");
-				e.printStackTrace();
-				System.exit(0);
+			if(!duplicateData) {
+				try {
+					fos.write(dataPacket.getData(),0,dataPacket.getData().length);
+				} catch (IOException e) {
+				    log.log(0,"Failed to write data to file!");
+					e.printStackTrace();
+					System.exit(0);
+				}
 			}
-			
 			
 			// Send Acknowledgement packet with block number
 			ackPacket = new TFTPPacket.ACK(blockNum);
 			sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, serverAddress, replyPort);
+			if(!duplicateData) {
+				lastBlock = blockNum;
+			}
 			
 			log.log(5,"ACK Packet Successfully Assembled");
+			log.log(5,"Last block number updated");
 			
 			// Send ack packet to server on serverPort
 			log.log(5,"Sending Packet:\n"
@@ -142,22 +173,41 @@ public class Client {
 				System.exit(1);
 			}
 			
+			duplicateData = false;
 			if(moreToWrite) {
 				log.log(5,"Waiting for Next DATA Block:");
 			}
 		}
 		
 		log.log(5,"File transfer complete!");
+		
+		try {
+			fos.flush();
+			fos.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
 	}
 	
+	/**
+	 * Method to write a file to the server.  The Client must already have the server
+	 * address and port #.
+	 * 
+	 * @param filename Filepath to the client-side file that will be read from
+	 */
 	public void write(String filename)
 	{
-		/**
-		 * Method to write a file to the server.  The Client must already have the server
-		 * address and port #.  Sends the initial WRQ, then runs a loop to transfer the 
-		 * data to the server.
-		 */
 	    
+		// Initializing the socket timeout.  If it cannot be set, the file transfer will be stopped.
+		try {
+			sendReceiveSocket.setSoTimeout(5000);
+		} catch(SocketException se) {
+			log.log(0,"Socket timeout could not be set.  Cancelling file transfer.");
+			return;
+		}
+		
 		FileInputStream fis = null;
 		try {
 			fis = new FileInputStream(filename);
@@ -168,7 +218,8 @@ public class Client {
 		log.log(5,"Successfully opened: "+filename);
 		
 		TFTPPacket.DATA dataPacket;
-	    DatagramPacket sendPacket, receivePacket;
+	    DatagramPacket receivePacket;
+	    DatagramPacket sendPacket = null;
 	    byte[] data = new byte[TFTPPacket.MAX_SIZE];
 	    int len = 69999;
 		int blockNum = 0;
@@ -194,8 +245,6 @@ public class Client {
 			System.exit(0);
 		}
     	
-    	int replyPort;
-    	
     	if (ackPacket.getBlockNum() == 0 ) {
 			// Correct acks
 			log.log(5,"Recieved ACK for block #0.  Starting data transfer...");
@@ -205,57 +254,85 @@ public class Client {
     		throw new IllegalArgumentException();
 		}
     	
-		replyPort = receivePacket.getPort();
-		
+		int replyPort = receivePacket.getPort();
 		boolean moreToRead = true;
+		boolean duplicateAck = false;
 		while (moreToRead) {
-			// Read data from file into data packet
-		    blockNum++;
-		    blockNum = blockNum & 0xFFFF;
-		    try {
-		    	if ((len=fis.read(data,0,512)) < 512) {
-		    		moreToRead = false;
-		    		if (len == -1) {
-		    			// End of file reached exactly. Send 0 bytes of data.
-		    			len = 0;
+			// Read data from file into data packet and send to server if the last ACK was correct
+		    if(!duplicateAck) {
+		    	blockNum++;
+		    	blockNum = blockNum & 0xFFFF;
+		    	try {
+		    		if ((len=fis.read(data,0,512)) < 512) {
+		    			moreToRead = false;
+		    			if (len == -1) {
+		    				// End of file reached exactly. Send 0 bytes of data.
+		    				len = 0;
+		    			}
+		    			fis.close();
 		    		}
-					fis.close();
+		    		// Shrink wrap size based on the # of bytes read from the file
+		    		data = Arrays.copyOf(data, len);
+		    	} catch (IOException e) {
+		    		e.printStackTrace();
+		    		System.exit(0);
 		    	}
-		    	// Shrink wrap size based on the # of bytes read from the file
-		    	data = Arrays.copyOf(data, len);
-			} catch (IOException e) {
-				e.printStackTrace();
-				System.exit(0);
-			}
+		    	
+		    	// Assemble data packet
+		    	dataPacket = new TFTPPacket.DATA(blockNum, data);
+		    	sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, serverAddress, replyPort);
+		    	
+			    log.log(5,"Sending Packet:"
+			    	+ "Packet Type: DATA"
+			    	+ "Filename: "+filename
+			    	+ "Block Number: "+blockNum
+			    	+ "# of Bytes: "+len);
+		    	
+		    	try {
+		    		sendReceiveSocket.send(sendPacket);
+		    	} catch (IOException e) {
+		    		e.printStackTrace();
+		    		System.exit(1);
+		    	}
+		    	
+		    	duplicateAck = false;
+		    }
 		    
-			// Assemble data packet
-		    dataPacket = new TFTPPacket.DATA(blockNum, data);
-		    sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, serverAddress, replyPort);
-		    
-			log.log(5,"Sending Packet:"
-				+ "Packet Type: DATA"
-				+ "Filename: "+filename
-				+ "Block Number: "+blockNum
-				+ "# of Bytes: "+len);
-		    
-		    try {
-	    		sendReceiveSocket.send(sendPacket);
-	    	} catch (IOException e) {
-	    		e.printStackTrace();
-    			System.exit(1);
-	    	}
-			// Wait for ACK
+		    // Wait for ACK
 			log.log(5,"Waiting for ACK packet...");
 		    
 		    // New Receive total bytes
 		    data = new byte[TFTPPacket.MAX_SIZE];
 		    receivePacket = new DatagramPacket(data, data.length);
-		    try {
-	    		sendReceiveSocket.receive(receivePacket);
-	    	} catch(IOException e) {
-	    		e.printStackTrace();
-    			System.exit(1);
-	    	}
+		    boolean acknowledged = false;
+		    int resendCount = 0;
+		    // Loop to handle socket timeouts.  If the socket times out, the last data packet is sent again.
+		    // Loops 5 times until the program gives up and stops the transfer.
+		    while(!acknowledged) {
+		    	try {
+		    		sendReceiveSocket.receive(receivePacket);
+		    		acknowledged = true;
+		    	} catch(IOException e1) {
+		    		if(e1 instanceof SocketTimeoutException) {
+		    			log.log(0,"Socket timeout while waiting for ACK packet.");
+		    			if(resendCount > 4) {
+				    		log.log(0,"Data has been re-sent 5 times.  Aborting file transfer.");
+				    		return;
+				    	}
+		    			log.log(5,"Re-sending last DATA packet.");
+		    			try {
+				    		sendReceiveSocket.send(sendPacket);
+				    	} catch (IOException e2) {
+				    		e2.printStackTrace();
+				    		System.exit(1);
+				    	}
+		    			resendCount++;
+		    		} else {
+		    		e1.printStackTrace();
+		    		System.exit(1);
+		    		}
+		    	}
+		    }
 		    
 		    // Parse ACK for correctness
 		    ackPacket = null;
@@ -269,21 +346,22 @@ public class Client {
 			}
 	    	if (ackPacket.getBlockNum() == blockNum ) {
 				// Correct acks
+	    		duplicateAck = false;
 			} else {
 				// Incorrect ack
-				log.log(0,"Wrong ACK response. Reason: Incorrect block number");
-	    		throw new IllegalArgumentException();
+				log.log(0,"Wrong ACK response. Reason: Incorrect block number.  Ignoring ACK and waiting for another packet.");
+				duplicateAck = true;
 			}
 	    	
 			log.log(5,"Received Packet:"
 				+"Packet Type: ACK"
 				+"Block Number: "+blockNum);
-			
 		}
 		// All data is sent and last ACK received,
 		// Close socket, quit
 		log.log(5,"File transfer complete!");
 	}
+	
 	
 	public void buildRequest(String source, String dest)
 	{
@@ -388,7 +466,7 @@ public class Client {
 	
 	private void setVerboseCmd (Console c, String[] args) {
 		c.println("Running in verbose mode.");
-		this.log.setVerboseLevel(5);
+		log.setVerboseLevel(5);
 	}
 	
 	private void setLogfileCmd (Console c, String[] args) {
@@ -406,7 +484,7 @@ public class Client {
 
 	private void setQuietCmd (Console c, String[] args) {
 		c.println("Running in quiet mode.");
-		this.log.setVerboseLevel(0);
+		log.setVerboseLevel(0);
 	}
 	
 	private void putCmd (Console c, String[] args) {
@@ -535,7 +613,7 @@ public class Client {
 	}
 	
 	private void helpCmd (Console c, String[] args) {
-		c.println("Avaliable Server Commands:");
+		c.println("Avaliable Client Commands:");
 		c.println("connect [server] <ip>\n\tSelect a server, if port is not specified port 69 will be used.");
 		c.println("put [local file] <remote file>\n\tSend a file to the server.");
 		c.println("get [remote file] <local file>\n\tGet a file from the server.");
