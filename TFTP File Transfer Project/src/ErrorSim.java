@@ -376,6 +376,7 @@ class ErrorSimClientListener{
 		if(ei != null) {
 			System.out.println("Applying the following error before sending packet to client:");
 			System.out.println(ei);
+			System.out.print("\n");
 		
 			if(ei.errorType == ErrorInstruction.errorTypes.DUPLICATE) {
 				//Send the packet now, and its duplicate later
@@ -609,6 +610,7 @@ class ErrorSimServerListener implements Runnable {
 		if(ei != null) {
 			System.out.println("Applying the following error before sending packet to server:");
 			System.out.println(ei);
+			System.out.print("\n");
 		
 			if(ei.errorType == ErrorInstruction.errorTypes.DUPLICATE) {
 				//Send the packet now, and its duplicate later
