@@ -11,7 +11,7 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.util.Arrays;
-import java.util.Map;
+import java.util.Scanner;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -57,22 +57,6 @@ class ServerListener implements Runnable {
 	 */
 	public void setVerbose(boolean mode) {
 		verbose = mode;
-	}
-	
-	/**
-	 * Determine if listener thread is in verbose mode
-	 * @return Whether the listener thread is in verbose mode
-	 */
-	public boolean getVerbose() {
-		return verbose;
-	}
-	
-	/**
-	 * Get the port that the listener is listening on
-	 * @return The port that the listener is listening on
-	 */
-	public int getPort() {
-		return listenerPort;
 	}
 	
 	/**
@@ -528,76 +512,6 @@ class WriteHandler extends RequestHandler implements Runnable {
  * Server class handles the setup of the Server and acts as the UI thread.
  */
 public class Server {
-	private ServerListener listener;
-	private Thread listenerThread;
-	
-	public Server(int serverPort, boolean verbose) {
-		this.listener = new ServerListener(serverPort, verbose);
-		this.listenerThread = new Thread(listener);
-	}
-	
-	public void start () {
-		listenerThread.start();
-	}
-	
-	private void shutdown (Console c, String[] args) {
-		if(args.length > 1) {
-			c.println("Error: Too many parameters.");
-		}
-		else {
-			if (this.listener.getVerbose()) {
-				c.println("Shutting down Server...");
-			}
-			this.listener.close();
-			try {
-				c.close();
-			} catch (IOException e) {
-				c.printerr("Error closing console thread.");
-				System.exit(1);
-			}
-			c.println("Server shutdown.");
-			System.exit(0);
-		}
-	}
-
-	private void setVerboseCmd (Console c, String[] args) {
-		if(args.length > 1) {
-			c.println("Error: Too many parameters.");
-		}
-		else {
-			listener.setVerbose(true);
-			c.println("Showing additional information.");
-			
-		}
-	}
-	
-	private void setQuietCmd (Console c, String[] args) {
-		if(args.length > 1) {
-			c.println("Error: Too many parameters.");
-		}
-		else {
-			listener.setVerbose(false);
-			c.println("Hiding extra information.");
-		}
-	}
-	
-	private void setServerPortCmd (Console c, String[] args) {
-		if(args.length > 2) {
-			c.println("Error: Too many parameters.");
-		}
-		else if(args.length == 1) {
-			c.println("Server port: " + this.listener.getPort());
-		}
-	}
-	
-	private void helpCmd (Console c, String[] args) {
-		c.println("The following is a list of commands and thier usage:");
-		c.println("shutdown - Closes the Server.");
-		c.println("verbose - Makes the server output more detailed information.");
-		c.println("quiet - Makes the server output only basic information.");
-		c.println("serverport - Outputs the port currently being used to listen to requests");
-		c.println("help - Shows help information.");
-	}
 	
 	/**
 	 * main function for the server
@@ -647,14 +561,10 @@ public class Server {
 		ServerListener listener = new ServerListener(serverPort, verbose);
 		Thread listenerThread = new Thread(listener);
 		listenerThread.start();
-
-		// Create server instance and start it
-	    Server server = new Server(serverPort, verbose);
 		
 		if(verbose) {
 			System.out.println("Listening to client on port " + serverPort);
 		}
-
 	
 		
 		// Start UI Thread
@@ -729,21 +639,5 @@ public class Server {
 				System.out.println("Invalid command.");
 			}
 		}
-
-
-
-		// Create and start console UI thread
-		Map<String, Console.CommandCallback> commands = Map.ofEntries(
-				Map.entry("shutdown", server::shutdown),
-				Map.entry("verbose", server::setVerboseCmd),
-				Map.entry("quiet", server::setQuietCmd),
-				Map.entry("serverport", server::setServerPortCmd),
-				Map.entry("help", server::helpCmd)
-				);
-
-		Console console = new Console(commands);
-
-		Thread consoleThread = new Thread(console);
-		consoleThread.start();
 	}
 }
