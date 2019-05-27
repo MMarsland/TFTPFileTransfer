@@ -317,7 +317,7 @@ abstract class RequestHandler implements Runnable {
 			System.out.println("Received Packet:");
 		}
 		System.out.println("	Packet Type: "+type);
-		if (filename.isEmpty()) {
+		if (filename != "") {
 			System.out.println("	Filename: "+filename);
 		}
 		if (mode != null) {
@@ -755,18 +755,20 @@ class WriteHandler extends RequestHandler implements Runnable {
 		    // Send ack and RECEIVE next DATA
 		    dataPacket = successfullySendAckAndReceiveData(ackPacket);
 		    
-		    if(this.verbose) {
-		    	printPacketInformation("recieved", "DATA", this.filename, this.mode, blockNum, len);
-			}
-		    // =====================================================================
-		    
-		    
-		    // =================== WRITE DATA INTO FILE ======================
+		    // Get Block Info
 		    blockNum = dataPacket.getBlockNum();
 		    len = dataPacket.getData().length;
 		    if (len < 512) {
 		    	moreToWrite = false;
 		    }
+		    
+		    if(this.verbose) {
+		    	printPacketInformation("recieved", "DATA", this.filename, this.mode, blockNum, len);
+		    }
+		    
+		    // =====================================================================
+		    
+		    // =================== WRITE DATA INTO FILE ======================
 		    
 			// Write into file
 		    try {
@@ -792,6 +794,10 @@ class WriteHandler extends RequestHandler implements Runnable {
     		e.printStackTrace();
 			System.exit(1);
     	}
+	    
+	    if(this.verbose) {
+	    	printPacketInformation("send", "ACK", "", null, blockNum, -1);
+		}
 	    // ============================================
 		
 	    // Done Writing! Close the file
