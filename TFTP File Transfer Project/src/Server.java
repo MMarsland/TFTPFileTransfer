@@ -317,7 +317,7 @@ abstract class RequestHandler implements Runnable {
 			System.out.println("Received Packet:");
 		}
 		System.out.println("	Packet Type: "+type);
-		if (filename.isEmpty()) {
+		if (filename != "") {
 			System.out.println("	Filename: "+filename);
 		}
 		if (mode != null) {
@@ -463,8 +463,8 @@ class ReadHandler extends RequestHandler implements Runnable {
 	    			System.out.println("Socket timeout while waiting for ACK packet.");
 	    		}
 	    		
-    			if(resendCount >= 5) {
-		    		System.err.println("Data has been re-sent 5 times.  Aborting file transfer.");
+	    		if(resendCount >= TFTPPacket.TFTP_NUM_RETRIES) {
+		    		System.err.println("Ack has been re-sent "+TFTPPacket.TFTP_NUM_RETRIES+" times.  Aborting file transfer.");
 		    		e.printStackTrace();
 		    		System.exit(1);
 		    	} else {
@@ -545,7 +545,7 @@ class ReadHandler extends RequestHandler implements Runnable {
 		    
 	    	// TODO Put this in for what's actually received every time? Logger?
 	    	if(this.verbose) {
-	    		printPacketInformation("receive", "ACK", null, null, this.blockNum, -1);
+	    		printPacketInformation("receive", "ACK", "", null, this.blockNum, -1);
 			}
 	    	//=================================================================
 	    	
@@ -606,54 +606,107 @@ class WriteHandler extends RequestHandler implements Runnable {
 	}
 
 	// TODO - Properly implement timeout/resend
-	public TFTPPacket successfullyReceiveData(TFTPPacket genericSendPacket) {
-		int blockNum = ((TFTPPacket.ACK) genericSendPacket).getBlockNum();
+	public TFTPPacket.DATA successfullySendAckAndReceiveData(TFTPPacket.ACK ackPacket) {
+		 DatagramPacket sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, clientAddress, clientTID);
+		 
 	    byte[] receiveData = new byte[TFTPPacket.MAX_SIZE];
 	    DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
-	    DatagramPacket sendPacket = new DatagramPacket(genericSendPacket.toBytes(), genericSendPacket.toBytes().length, clientAddress, clientTID);
-		// Loop until return.
+	    TFTPPacket.DATA dataPacket = null;
+		
+    	// Initial Variables
+	    int expectedBlockNum = ackPacket.getBlockNum() + 1;
+ 		int resendCount = 0;
+ 		long timeout = System.currentTimeMillis() + TFTPPacket.TFTP_DATA_TIMEOUT;
+ 		boolean sendAck = true;
+	 		
+	    // Set the socket's initial timeout to the generic value
+		try {
+			sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_DATA_TIMEOUT);
+	 	} catch (SocketException e) {
+	 		e.printStackTrace();
+			System.exit(1);
+	 	}
+	    
+		// Either going to return the correct next dataPacket or die trying.
 		while (true) {
+			// If this is the first send or if a re-send is required.
+			if (sendAck) {
+				try {
+		    		sendReceiveSocket.send(sendPacket);
+		    	} catch (Exception e) {
+		    		e.printStackTrace();
+					System.exit(1);
+		    	}
+				// Don't re-send until requested
+				sendAck = false;
+			}
 			
-			// Send the ack packet!
-		    try {
-	    		sendReceiveSocket.send(sendPacket);
-	    	} catch (IOException e) {
-	    		e.printStackTrace();
-    			System.exit(1);
-	    	}
-		    
-		    // Receive data!
-		    try {
+			// Try to receive Data Packet!
+			try {
 	    		sendReceiveSocket.receive(receivePacket);
+	    		// Received a packet.
+	    		
+	    		// ================= Parse the packet ======================
+	    		try {
+					dataPacket = new TFTPPacket.DATA(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
+				} catch (IllegalArgumentException e) {
+					System.err.println("Incorrect Response. Reason: Expected Data.");
+					e.printStackTrace();
+					System.exit(1);
+				}
+		    	if (dataPacket.getBlockNum() > expectedBlockNum) {
+					System.err.println("Error: Block number higher than expected block number.  Aborting transfer.");
+					System.exit(1);
+				}
+		    	 else if(dataPacket.getBlockNum() < expectedBlockNum) {
+					// Duplicate ack
+		    		if (verbose) {
+		    			System.out.println("Wrong Data response. Reason: Incorrect block number.  Ignoring Data and waiting for another packet.");
+		    		}
+					int timeLeft = (int)(timeout - System.currentTimeMillis());
+					
+					if(timeLeft > 0) {
+						// Lower the timeout and loop back to listening (Without re-sending data)
+						try {
+							sendReceiveSocket.setSoTimeout(timeLeft);
+						} catch(SocketException e) {
+							e.printStackTrace();
+							System.exit(1);
+						}
+					} else {
+						// Overall timeout hit, move on to next re-send/receive attempt
+						throw new SocketTimeoutException();
+					}
+
+				} else if (dataPacket.getBlockNum() == expectedBlockNum) {
+					// CORRECT DATA FOUND!
+		    		return dataPacket;
+				}
+		    	// =======================================================
+	    		
+	    		
 	    	} catch(SocketTimeoutException e) {
-	    		// TODO - Catch Time_out exception and return to sending data! (Loop?)
 	    		if (verbose) {
-	    			System.out.println("Timed out waiting for the data. Resending Ack");	
+	    			System.out.println("Socket timeout while waiting for DATA packet.");
 	    		}
-	    		// Re-send the last ack packet.
-	    		continue;
+	    		
+    			if(resendCount >= TFTPPacket.TFTP_NUM_RETRIES) {
+		    		System.err.println("Ack has been re-sent "+TFTPPacket.TFTP_NUM_RETRIES+" times.  Aborting file transfer.");
+		    		e.printStackTrace();
+		    		System.exit(1);
+		    	} else {
+		    		// Re-send ack.
+		    		if (verbose) {
+	    				System.out.println("Re-sending ACK packet.");
+	    			}
+	    			timeout = System.currentTimeMillis() + TFTPPacket.TFTP_DATA_TIMEOUT;
+	    			resendCount++;
+	    			sendAck = true;
+		    	}
 	    	} catch(IOException e) {
 	    		e.printStackTrace();
-    			System.exit(1);
+	    		System.exit(1);
 	    	}
-		    
-			// Check Packet for correctness
-		    TFTPPacket.DATA dataPacket = null;
-	    	try {
-				dataPacket = new TFTPPacket.DATA(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
-			} catch (IllegalArgumentException e) {
-				System.err.println("Incorrect Response. Reason: Expected Data.");
-				e.printStackTrace();
-				System.exit(1);
-			}
-	    	
-	    	// Definitely data :)
-			// Strip block number to ensure this is the next data block
-	    	if ((dataPacket.getBlockNum() == (blockNum+1))) {
-	    		// This is the correct next data block! Yay!
-	    		return dataPacket;
-	    	}
-	    	// Send Again?... Well
 		}
 	}
 	
@@ -700,20 +753,22 @@ class WriteHandler extends RequestHandler implements Runnable {
 			}
 		    
 		    // Send ack and RECEIVE next DATA
-		    dataPacket = (TFTPPacket.DATA) successfullyReceiveData(ackPacket);
+		    dataPacket = successfullySendAckAndReceiveData(ackPacket);
 		    
-		    if(this.verbose) {
-		    	printPacketInformation("recieved", "DATA", this.filename, this.mode, blockNum, len);
-			}
-		    // =====================================================================
-		    
-		    
-		    // =================== WRITE DATA INTO FILE ======================
+		    // Get Block Info
 		    blockNum = dataPacket.getBlockNum();
 		    len = dataPacket.getData().length;
 		    if (len < 512) {
 		    	moreToWrite = false;
 		    }
+		    
+		    if(this.verbose) {
+		    	printPacketInformation("recieved", "DATA", this.filename, this.mode, blockNum, len);
+		    }
+		    
+		    // =====================================================================
+		    
+		    // =================== WRITE DATA INTO FILE ======================
 		    
 			// Write into file
 		    try {
@@ -725,7 +780,7 @@ class WriteHandler extends RequestHandler implements Runnable {
 			}
 		    // ===============================================================
 		    
-		    // Continue to packet
+		    // Continue to next packet
 		}
 		
 		// =============SEND LAST ACK==================
@@ -739,7 +794,11 @@ class WriteHandler extends RequestHandler implements Runnable {
     		e.printStackTrace();
 			System.exit(1);
     	}
-	    // =============================================
+	    
+	    if(this.verbose) {
+	    	printPacketInformation("send", "ACK", "", null, blockNum, -1);
+		}
+	    // ============================================
 		
 	    // Done Writing! Close the file
 		try {
