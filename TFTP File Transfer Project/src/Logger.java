@@ -56,6 +56,20 @@ public class Logger {
 		}
 	}
 	
+	/**
+	 * Log a datagram/TFTPPacket.
+	 * 
+	 * @param level The log level at which the packet information should be
+	 * 				logged
+	 * @param datagram The datagram packet to be logged
+	 * @param packet The TFTPPacket parsed from the datagram packet, if null a
+	 * 				 TFTPPacket will be created from datagram
+	 * @param received True is this packet was received, false if this packet
+	 * 				   was sent
+	 * @param hostFriendlyName A human friendly name to referring to the host
+	 * 						   to which this packet was sent or from which it
+	 * 						   was received
+	 */
 	public void logPacket(int level, DatagramPacket datagram, TFTPPacket packet,
 			boolean received, String hostFriendlyName) {
 		
