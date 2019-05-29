@@ -135,12 +135,13 @@ public class Console implements Runnable, Closeable {
 				String[] split = line.split(" ");
 
 				// Get the specified command callback
-				CommandCallback command = commands.get(split[0].toLowerCase());
+				CommandCallback command = commands.get(
+						split[0].toLowerCase().trim());
 
 				if (command != null) {
 					// Valid command, run callback
 					command.runCommand(this, split);
-				} else if (!line.isBlank()) {
+				} else if (!line.trim().isEmpty()) {
 					// Unknown command, print angry message
 					this.println("Unkown command \"" + split[0] + "\"");
 				}
