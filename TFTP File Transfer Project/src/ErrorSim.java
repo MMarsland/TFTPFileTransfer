@@ -222,6 +222,9 @@ class ErrorInstruction {
 		if(param1 >= 65536 && (errorType == errorTypes.INVALIDATE_BLOCKNUM || errorType == errorTypes.INVALIDATE_ERRORNUM)) {
 			throw new IllegalArgumentException("new number must be less than 65536");
 		}
+		if(errorType == errorTypes.INVALIDATE_MODE && !(packetType == packetTypes.RRQ || packetType == packetTypes.WRQ)) {
+			throw new IllegalArgumentException("command not applicable to packet type");
+		}
 		
 		this.packetType = packetType;
 		this.errorType = errorType;
@@ -311,6 +314,91 @@ class ErrorInstruction {
 			desc += "Perform " + timesToPerform + " time(s), " + (timesToPerform - occurances) + " remaining.";
 		}
 		return desc;
+	}
+	
+	public byte[] modifyPacket(DatagramPacket packet) {
+		
+		if(this.errorType == errorTypes.INVALIDATE_APPEND) {
+			byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength() + this.param1);
+			
+			int i;
+			for(i = packet.getLength(); i < temp.length; i++) {
+				temp[i] = (byte)((Math.random() * 254) + 1);
+			}
+			return temp;
+		}
+		else if(this.errorType == errorTypes.INVALIDATE_BLOCKNUM) {
+			//Replace the block number with the one provided by the user
+			byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
+			if(packet.getLength() > 3) {
+				temp[2] = (byte)(param1>>8);
+				temp[3] = (byte)(param1);
+				return temp;
+			}
+		}
+		else if(this.errorType == errorTypes.INVALIDATE_ERRORNUM) {
+			//Replace the error number with the one provided by the user
+			byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
+			if(packet.getLength() > 3) {
+				temp[2] = (byte)(param1>>8);
+				temp[3] = (byte)(param1);
+				return temp;
+			}
+		}
+		else if(this.errorType == errorTypes.INVALIDATE_MODE) {
+			//Remove the mode string to invalidate it
+			byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
+			if(temp.length > 6) {
+				int start;
+				//Find the start of the mode string
+				for(start=2; (start < packet.getLength()) && temp[start] != 0; start++) {}
+				
+				//Copy everything except the mode string into a new array
+				byte[] toReturn = new byte[start + 2];
+				System.arraycopy(temp, 0, toReturn, 0, start);
+				temp[packet.getLength()-1] = 0;
+				return toReturn;
+			}
+		}
+		else if(this.errorType == errorTypes.INVALIDATE_OPCODE) {
+			//Replace the first byte of the opcode with a random number
+			byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
+			if(packet.getLength() > 0) {
+				temp[0] = (byte)((Math.random() * 254) + 1);
+				return temp;
+			}
+		}
+		else if(this.errorType == errorTypes.INVALIDATE_RMZ) {
+			//Either removing the last 0 in an EEROR packet, or the last 0 in a WRQ/RRQ packet
+			if(this.param1 == 0 || this.param1 == 2) {
+				return Arrays.copyOf(packet.getData(), packet.getLength()-1);
+			}
+			else if(packet.getLength() > 4){ 
+				//Remove the first 0 in a WRQ/RRQ
+				byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
+				int pos;
+				
+				//Find the first 0 byte
+				for(pos=2; (pos < temp.length) && temp[pos] != 0; pos++) {}
+				
+				//Copy everything except the first 0 byte into a new array
+				byte[] toReturn = new byte[packet.getLength()-1];
+				System.arraycopy(temp, 0, toReturn, 0, pos);
+				System.arraycopy(temp, pos+1, toReturn, pos, packet.getLength()-pos-1);
+				return toReturn;
+			}
+		}
+		else if(this.errorType == errorTypes.INVALIDATE_SHRINK) {
+			if(this.packetType == packetTypes.ERROR) {
+				//Shrink error packets to 4 bytes
+				return Arrays.copyOf(packet.getData(), 4);
+			}
+			else {
+				//Shrink all other packets to 3 bytes
+				return Arrays.copyOf(packet.getData(), 3);
+			}
+		}
+		return packet.getData(); //Return the original data if the packet does not need to be modified
 	}
 	
 	/**
@@ -427,6 +515,17 @@ class ErrorSimClientListener{
 			else if(ei.errorType == ErrorInstruction.errorTypes.DELAY) {
 				//Send the packet later
 				timer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), ei.param1);
+			}
+			else if(ei.errorType == ErrorInstruction.errorTypes.DROP) {
+				//Do nothing, packet does not need to be sent
+			}
+			else if(ei.errorType == ErrorInstruction.errorTypes.INVALIDATE_TID) {
+				//Send out of a different port
+			}
+			else {
+				//Modify the packet according to the error and send it 
+				byte[] temp = ei.modifyPacket(packet);
+				timer.schedule(new DelayedSendToClient(temp, temp.length), 0);
 			}
 		}
 		else {
@@ -664,6 +763,17 @@ class ErrorSimServerListener implements Runnable {
 				//Send the packet later
 				timer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), ei.param1);
 			}
+			else if(ei.errorType == ErrorInstruction.errorTypes.DROP) {
+				//Do nothing, packet does not need to be sent
+			}
+			else if(ei.errorType == ErrorInstruction.errorTypes.INVALIDATE_TID) {
+				//Send out of a different port
+			}
+			else {
+				//Modify the packet according to the error and send it 
+				byte[] temp = ei.modifyPacket(packet);
+				timer.schedule(new DelayedSendToServer(temp, temp.length), 0);
+			}
 		}
 		else {
 			//Send the packet to the client without introducing any errors
@@ -775,9 +885,8 @@ class ErrorSimServerListener implements Runnable {
 		 */
 		public synchronized void run() {
 			DatagramPacket packet;
-			TFTPPacket parsedPacket = TFTPPacket.parse(Arrays.copyOf(data, length));
 			
-			if(parsedPacket instanceof TFTPPacket.WRQ || parsedPacket instanceof TFTPPacket.RRQ) {
+			if(length > 1 && (data[1] == 1 || data[1] == 2)) {
 				packet = new DatagramPacket(data, length, serverAddress, serverPort);
 			}
 			else {
@@ -806,7 +915,6 @@ class ErrorSimServerListener implements Runnable {
 		}	
 	}
 }
-
 
 /**
  * ErrorSim class handles the setup of the error simulator and acts as the UI thread.
@@ -1157,7 +1265,7 @@ public class ErrorSim {
 		if(args.length > 5) {
 			c.println("Error: Too many parameters.");
 		}
-		else if(args.length < 4){
+		else if(args.length < 4 || (args.length == 4 && (args[1].toLowerCase().equals("wrq") || args[2].toLowerCase().equals("rrq")))){
 			c.println("Error: Not enough parameters.");
 		}
 		else {
@@ -1165,7 +1273,6 @@ public class ErrorSim {
 				c.println("Error: Invalid packet type");
 				return;
 			}
-			
 			if(args.length == 5) {
 				try {
 					errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
