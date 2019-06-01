@@ -316,6 +316,11 @@ class ErrorInstruction {
 		return desc;
 	}
 	
+	/**
+	 * Modifies the data in a packet according to the error
+	 * @param packet The packet whose data should be modified
+	 * @return the modified data
+	 */
 	public byte[] modifyPacket(DatagramPacket packet) {
 		
 		if(this.errorType == errorTypes.INVALIDATE_APPEND) {
@@ -356,7 +361,7 @@ class ErrorInstruction {
 				//Copy everything except the mode string into a new array
 				byte[] toReturn = new byte[start + 2];
 				System.arraycopy(temp, 0, toReturn, 0, start);
-				temp[packet.getLength()-1] = 0;
+				toReturn[toReturn.length-1] = 0;
 				return toReturn;
 			}
 		}
@@ -456,12 +461,13 @@ class ErrorSimClientListener{
 	private DatagramSocket TIDSocket;
 	private InetAddress clientAddress;
     private int clientPort;
+    private Timer sendTimer;
+    private Timer invalidTIDSendTimer;
+    private SocketListener knownPortListener;
+    private SocketListener TIDPortListener;
+    private Thread knownPortListenerThread;
+    private Thread TIDPortListenerThread;
     boolean verbose;
-    Timer timer;
-    SocketListener knownPortListener;
-    SocketListener TIDPortListener;
-    Thread knownPortListenerThread;
-    Thread TIDPortListenerThread;
     
 	
     /**
@@ -489,7 +495,8 @@ class ErrorSimClientListener{
 			System.exit(1);
 	    }
 		
-		timer = new Timer();
+		sendTimer = new Timer();
+		invalidTIDSendTimer = new Timer();
 		knownPortListener = new SocketListener(knownSocket);
 		TIDPortListener = new SocketListener(TIDSocket);
 		knownPortListenerThread = new Thread(knownPortListener);
@@ -509,28 +516,29 @@ class ErrorSimClientListener{
 		
 			if(ei.errorType == ErrorInstruction.errorTypes.DUPLICATE) {
 				//Send the packet now, and its duplicate later
-				timer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), 0);
-				timer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), ei.param1);
+				sendTimer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), 0);
+				sendTimer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), ei.param1);
 			}
 			else if(ei.errorType == ErrorInstruction.errorTypes.DELAY) {
 				//Send the packet later
-				timer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), ei.param1);
+				sendTimer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), ei.param1);
 			}
 			else if(ei.errorType == ErrorInstruction.errorTypes.DROP) {
 				//Do nothing, packet does not need to be sent
 			}
 			else if(ei.errorType == ErrorInstruction.errorTypes.INVALIDATE_TID) {
 				//Send out of a different port
+				invalidTIDSendTimer.schedule(new InvalidTIDSendToClient(packet.getData(), packet.getLength()), 0);
 			}
 			else {
 				//Modify the packet according to the error and send it 
 				byte[] temp = ei.modifyPacket(packet);
-				timer.schedule(new DelayedSendToClient(temp, temp.length), 0);
+				sendTimer.schedule(new DelayedSendToClient(temp, temp.length), 0);
 			}
 		}
 		else {
 			//Send the packet to the client without introducing any errors
-			timer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), 0);
+			sendTimer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), 0);
 		}
 	}
 
@@ -704,8 +712,80 @@ class ErrorSimClientListener{
 			this.cancel();
 		}	
 	}
-}
+	
+	/**
+	 * InvalidTIDSendToClient class allows a packet to be sent to the client with the wrong TID
+	 */
+	private class InvalidTIDSendToClient extends TimerTask{
+		byte data[];
+		int length;
 
+		/**
+		 * Creates a new task that will send a packet
+		 * @param data the data to send
+		 * @param length the length of the data
+		 */
+		public InvalidTIDSendToClient(byte data[], int length) {
+			this.data = data;
+			this.length = length;
+		}
+		
+		/**
+		 * The overridden run method for this thread
+		 */
+		public void run() {
+			DatagramSocket UnknownTIDSocket = null;
+			
+			try { //Set up the socket that will be used to send from an unknown TID
+				UnknownTIDSocket = new DatagramSocket();
+			} catch (SocketException se) { // Can't create the socket.
+				se.printStackTrace();
+				System.exit(1);
+		    }
+			
+			DatagramPacket packet = new DatagramPacket(data, length, clientAddress, clientPort);
+			
+			if(verbose) {
+	    		System.out.println("Sending packet to client with invalid TID.");
+	    	    System.out.println("To address: " + packet.getAddress());
+	    	    System.out.println("To port: " + packet.getPort());
+	    	    System.out.println("Length: " + packet.getLength());
+	    	    TFTPPacket.parse(Arrays.copyOf(data, length)).print();
+	    	    System.out.print("\n");
+	    	}
+			
+			try { //Send the packet to the client
+	    		UnknownTIDSocket.send(packet);
+	    	} catch (IOException e) {
+	    		if(e.getMessage().equals("socket closed")){
+	    			return;
+	    		}
+	    		e.printStackTrace();
+				System.exit(1);
+	    	}
+			
+			try { //Wait for a packet to come in from the client.
+				UnknownTIDSocket.receive(packet);
+	    	} catch(IOException e) {
+	    		if(e.getMessage().toLowerCase().equals("socket closed")){
+	    			return;
+	    		}
+	    		e.printStackTrace();
+				System.exit(1);
+	    	}
+	    	
+	    	if(verbose) {
+	    		System.out.println("Received packet from client in resonse to invalid TID.");
+	    	    System.out.println("From address: " + packet.getAddress());
+	    	    System.out.println("From port: " + packet.getPort());
+	    	    System.out.println("Length: " + packet.getLength());
+	    	    TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
+	    	    System.out.print("\n");
+	    	}
+			this.cancel();
+		}	
+	}
+}
 
 /**
  * Handles all communication to and from the server
@@ -716,9 +796,9 @@ class ErrorSimServerListener implements Runnable {
 	private InetAddress serverAddress;
     private int serverPort;
     private int serverTID;
+    private Timer sendTimer;
+    private Timer invalidTIDSendTimer;
     boolean verbose;
-    Timer timer;
-    
 	
     /**
      * Constructor for ErrorSimServerListener
@@ -740,7 +820,8 @@ class ErrorSimServerListener implements Runnable {
 			System.exit(1);
 	    }
 		
-		timer = new Timer();
+		sendTimer = new Timer();
+		invalidTIDSendTimer = new Timer();
 	}
 	
 	/**
@@ -756,28 +837,29 @@ class ErrorSimServerListener implements Runnable {
 		
 			if(ei.errorType == ErrorInstruction.errorTypes.DUPLICATE) {
 				//Send the packet now, and its duplicate later
-				timer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), 0);
-				timer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), ei.param1);
+				sendTimer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), 0);
+				sendTimer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), ei.param1);
 			}
 			else if(ei.errorType == ErrorInstruction.errorTypes.DELAY) {
 				//Send the packet later
-				timer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), ei.param1);
+				sendTimer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), ei.param1);
 			}
 			else if(ei.errorType == ErrorInstruction.errorTypes.DROP) {
 				//Do nothing, packet does not need to be sent
 			}
 			else if(ei.errorType == ErrorInstruction.errorTypes.INVALIDATE_TID) {
 				//Send out of a different port
+				invalidTIDSendTimer.schedule(new InvalidTIDSendToServer(packet.getData(), packet.getLength()), 0);
 			}
 			else {
 				//Modify the packet according to the error and send it 
 				byte[] temp = ei.modifyPacket(packet);
-				timer.schedule(new DelayedSendToServer(temp, temp.length), 0);
+				sendTimer.schedule(new DelayedSendToServer(temp, temp.length), 0);
 			}
 		}
 		else {
 			//Send the packet to the client without introducing any errors
-			timer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), 0);
+			sendTimer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), 0);
 		}
 	}
 	
@@ -910,6 +992,85 @@ class ErrorSimServerListener implements Runnable {
 	    		}
 	    		e.printStackTrace();
 				System.exit(1);
+	    	}
+			this.cancel();
+		}	
+	}
+	
+	/**
+	 * InvalidTIDSendToServer class allows a packet to be sent to the client with the wrong TID
+	 */
+	private class InvalidTIDSendToServer extends TimerTask{
+		byte data[];
+		int length;
+
+		/**
+		 * Creates a new task that will send a packet
+		 * @param data the data to send
+		 * @param length the length of the data
+		 */
+		public InvalidTIDSendToServer(byte data[], int length) {
+			this.data = data;
+			this.length = length;
+		}
+		
+		/**
+		 * The overridden run method for this thread
+		 */
+		public void run() {
+			DatagramSocket UnknownTIDSocket = null;
+			DatagramPacket packet;
+			
+			try { //Set up the socket that will be used to send from an unknown TID
+				UnknownTIDSocket = new DatagramSocket();
+			} catch (SocketException se) { // Can't create the socket.
+				se.printStackTrace();
+				System.exit(1);
+		    }
+			
+			if(length > 1 && (data[1] == 1 || data[1] == 2)) {
+				packet = new DatagramPacket(data, length, serverAddress, serverPort);
+			}
+			else {
+				packet = new DatagramPacket(data, length, serverAddress, serverTID);
+			}
+			
+			if(verbose) {
+	    		System.out.println("Sending packet to server with invalid TID.");
+	    	    System.out.println("To address: " + packet.getAddress());
+	    	    System.out.println("To port: " + packet.getPort());
+	    	    System.out.println("Length: " + packet.getLength());
+	    	    TFTPPacket.parse(Arrays.copyOf(data, length)).print();
+	    	    System.out.print("\n");
+	    	}
+			
+			try { //Send the packet to the server
+	    		UnknownTIDSocket.send(packet);
+	    	} catch (IOException e) {
+	    		if(e.getMessage().equals("socket closed")){
+	    			return;
+	    		}
+	    		e.printStackTrace();
+				System.exit(1);
+	    	}
+			
+			try { //Wait for a packet to come in from the server.
+				UnknownTIDSocket.receive(packet);
+	    	} catch(IOException e) {
+	    		if(e.getMessage().toLowerCase().equals("socket closed")){
+	    			return;
+	    		}
+	    		e.printStackTrace();
+				System.exit(1);
+	    	}
+	    	
+	    	if(verbose) {
+	    		System.out.println("Received packet from server in resonse to invalid TID.");
+	    	    System.out.println("From address: " + packet.getAddress());
+	    	    System.out.println("From port: " + packet.getPort());
+	    	    System.out.println("Length: " + packet.getLength());
+	    	    TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
+	    	    System.out.print("\n");
 	    	}
 			this.cancel();
 		}	
