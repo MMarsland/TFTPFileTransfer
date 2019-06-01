@@ -292,10 +292,6 @@ class ServerListener implements Runnable {
 }
 
 
-
-
-
-
 /**
  * Abstract Class for Request Handlers. Allows inheritance for ReadHandler 
  * and Write Handler for code simplification and cleaner structure
@@ -331,6 +327,9 @@ abstract class RequestHandler implements Runnable {
 		}
 	}
 }
+
+
+
 
 /**
  * Read Handler Class for handling Read Requests
@@ -376,7 +375,6 @@ class ReadHandler extends RequestHandler implements Runnable {
 	 * @param sendPacket
 	 * @param receivePacket
 	 */
-	// TODO - Properly implement timeout/re-send
 	public TFTPPacket.ACK successfullySendDataAndReceiveAck(TFTPPacket.DATA dataPacket) {
 		// Packet to Send
 		DatagramPacket sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, clientAddress, clientTID);
@@ -399,13 +397,20 @@ class ReadHandler extends RequestHandler implements Runnable {
     		e.printStackTrace();
 			System.exit(1);
     	}
-					
+				
+		//Establish the security manager
+		SecurityManager security = System.getSecurityManager();
+		
 		// Either going to return the correct ackPacket or give up and die.
 		while (true) {
 			// If this is the first send or if a re-send is required.
 			if (sendData) {
 				try {
 		    		sendReceiveSocket.send(sendPacket);
+				} catch (SecurityException e) {
+					System.err.println("Failed to connect to port. Assuming that we just didn't get the last Ack...");
+					// Return a fake ack packet. 
+					return new TFTPPacket.ACK(blockNum);
 		    	} catch (Exception e) {
 		    		e.printStackTrace();
 					System.exit(1);
@@ -565,6 +570,9 @@ class ReadHandler extends RequestHandler implements Runnable {
 	}
 }
 
+
+
+
 /**
  * Write Handler Class for handling Write Requests
  */
@@ -605,7 +613,6 @@ class WriteHandler extends RequestHandler implements Runnable {
 		
 	}
 
-	// TODO - Properly implement timeout/resend
 	public TFTPPacket.DATA successfullySendAckAndReceiveData(TFTPPacket.ACK ackPacket) {
 		 DatagramPacket sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, clientAddress, clientTID);
 		 
@@ -805,8 +812,8 @@ class WriteHandler extends RequestHandler implements Runnable {
 			fos.flush();
 			fos.close();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
+			System.exit(1);
 		}
 		
 		// All data received and writes performed and last ack sent
