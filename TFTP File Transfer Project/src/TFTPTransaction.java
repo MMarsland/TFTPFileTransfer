@@ -9,22 +9,53 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.Arrays;
 
+/**
+ * Encapsulates the logic of a TFTP file transfer
+ * 
+ * @author Samuel Dewan
+ */
 public abstract class TFTPTransaction implements Runnable {
+	
+	/**
+	 * Represents the state of a TFTPTransaction
+	 */
 	public enum TFTPTransactionState {
 		INITIALIZED, IN_PROGRESS, BLOCK_ZERO_TIMEOUT, TIMEOUT,
 		LAST_BLOCK_ACK_TIMEOUT, FILE_TOO_LARGE, FILE_IO_ERROR, SOCKET_IO_ERROR,
 		RECEIVED_BAD_PACKET, COMPLETE
 	}
 	
-	
+	/**
+	 * The socket used to communicate with the peer
+	 */
 	private DatagramSocket socket;
+	/**
+	 * The address of the peer
+	 */
 	private InetAddress remoteHost;
+	/**
+	 * The TID of the peer
+	 */
 	private int remoteTID;
 	
+	/**
+	 * The current state of the transaction
+	 */
 	private TFTPTransactionState state;
 	
+	/**
+	 * Logger used to log details of send and received packets
+	 */
 	private Logger logger;
 	
+	/**
+	 * Create a TFTPTransaction.
+	 * 
+	 * @param socket The socket used to communicate with the peer
+	 * @param remoteHost The address of the peer
+	 * @param remoteTID The TID of the peer
+	 * @param logger The logger used to log details of packets
+	 */
 	private TFTPTransaction(DatagramSocket socket, InetAddress remoteHost,
 			int remoteTID, Logger logger)
 	{
@@ -36,6 +67,12 @@ public abstract class TFTPTransaction implements Runnable {
 		this.state = TFTPTransactionState.INITIALIZED;
 	}
 	
+	/**
+	 * Send a TFTPPacket to the peer
+	 * 
+	 * @param packet The packet to be sent
+	 * @throws IOException
+	 */
 	private void sendToRemote(TFTPPacket packet) throws IOException
 	{	
 		synchronized (this.socket) {
@@ -44,18 +81,32 @@ public abstract class TFTPTransaction implements Runnable {
 				
 			this.socket.send(outgoing);
 			
-			this.logger.logPacket(5, outgoing, packet, false, "remote");
+			this.logger.logPacket(5, outgoing, packet, false, "peer");
 		}
 	}
 	
+	/**
+	 * Receive a TFTPPacket from the remote
+	 * 
+	 * @param timeout Receive timeout in milliseconds
+	 * @param updateTID Whether the peer's TID should be updated based on the 
+	 * 					TID of the received packet
+	 * @return The received TFTPPacket
+	 * @throws SocketException
+	 * @throws IOException
+	 * @throws IllegalArgumentException
+	 */
 	private TFTPPacket receiveFromRemote(int timeout, boolean updateTID)
 			throws SocketException, IOException, IllegalArgumentException
 	{
 		synchronized (this.socket) {
+			// Calculate timeout
 			long timeoutTime = System.currentTimeMillis() + timeout;
 			int timeoutMillis = (int)(timeoutTime - System.currentTimeMillis());
 			
+			// Continue trying to receive until the timeout runs out
 			while (timeoutMillis > 0) {
+				// Receive packet
 				this.socket.setSoTimeout(timeoutMillis);
 				
 				byte[] data = new byte[TFTPPacket.MAX_SIZE];
@@ -66,7 +117,10 @@ public abstract class TFTPTransaction implements Runnable {
 				TFTPPacket packet = TFTPPacket.parse(Arrays.copyOf(
 						received.getData(), received.getLength()));
 				
+				// Got packet
+				
 				if (updateTID) {
+					// Update remote TID to match received packet
 					this.remoteTID = received.getPort();
 				} else if (received.getPort() != this.remoteTID) {
 					// Got packet from wrong TID, send error to source host
@@ -81,13 +135,15 @@ public abstract class TFTPTransaction implements Runnable {
 						
 					this.socket.send(outgoing);
 					
+					this.logger.logPacket(5, outgoing, error, false, "peer");
+					
 					timeoutMillis =
 							(int)(timeoutTime - System.currentTimeMillis());
 					continue;
 				}
 				
 				// Received packet from valid TID
-				this.logger.logPacket(5, received, packet, true, "remote");
+				this.logger.logPacket(5, received, packet, true, "peer");
 				
 				return packet;
 			}
@@ -97,18 +153,45 @@ public abstract class TFTPTransaction implements Runnable {
 		}
 	}
 	
+	/**
+	 * Get the current state of the transaction.
+	 * 
+	 * @return The current state of the transaction
+	 */
 	public TFTPTransactionState getState ()
 	{
 		return this.state;
 	}
 	
-	
+	/**
+	 * Performs a transaction where data is being sent to the remote host
+	 */
 	public static class TFTPSendTransaction extends TFTPTransaction
 								implements Runnable {
+		/**
+		 * The file being sent
+		 */
 		private FileInputStream file;
+		/**
+		 * Whether we need to wait for ACK 0 before starting to send data
+		 */
 		private boolean waitAckZero;
+		/**
+		 * Buffer for data read from file
+		 */
 		private byte[] buffer;
 		
+		/**
+		 * Create a TFTPSendTransaction
+		 * 
+		 * @param socket The socket to be used to communicate with the peer
+		 * @param remoteHost The address of the peer
+		 * @param remoteTID The TID of the peer
+		 * @param sourceFile The file to be sent to the peer
+		 * @param waitAckZero Whether we need to wait for ACK 0
+		 * @param logger The logger used to print information on packets
+		 * @throws FileNotFoundException
+		 */
 		public TFTPSendTransaction(DatagramSocket socket,
 				InetAddress remoteHost, int remoteTID, String sourceFile,
 				boolean waitAckZero, Logger logger) throws FileNotFoundException
@@ -120,13 +203,25 @@ public abstract class TFTPTransaction implements Runnable {
 			this.buffer = new byte[TFTPPacket.BLOCK_SIZE];
 		}
 		
+		/**
+		 * Send a single data block.
+		 * 
+		 * @param blockNum The block number of the block to be sent
+		 * @param resend Whether this is a repeat block, if false a new block
+		 * 				 will be read from the file
+		 * @return True if an error occurred
+		 */
 		private boolean sendDataBlock (int blockNum, boolean resend)
 		{
 			if (!resend) {
 				// Read next block from file
 				try {
+					// Get up to a full buffer of data from the file
 					int numBytes = file.read(this.buffer);
+					// If no bytes where read from the file, buffer length
+					// should be 0
 					numBytes = (numBytes < 0) ? 0 : numBytes;
+					// Trim buffer to size
 					this.buffer = Arrays.copyOf(this.buffer, numBytes);
 				} catch (IOException e) {
 					// Could not read block from file
@@ -148,6 +243,9 @@ public abstract class TFTPTransaction implements Runnable {
 			return false;
 		}
 		
+		/**
+		 * Run transaction.
+		 */
 		public void run()
 		{
 			super.state = TFTPTransactionState.IN_PROGRESS;
@@ -293,13 +391,41 @@ public abstract class TFTPTransaction implements Runnable {
 		}
 	}
 	
+	/**
+	 * Encapsulates a transaction where DATA packets are received and ACK are
+	 * sent.
+	 */
 	public static class TFTPReceiveTransaction extends TFTPTransaction
 								implements Runnable {
+		/**
+		 * The file in which data should be saved.
+		 */
 		private FileOutputStream file;
+		/**
+		 * Whether an ACK 0 packet should be send before waiting for the first
+		 * DATA.
+		 */
 		private boolean sendAckZero;
+		/**
+		 * Whether the TID should be updated based on the first DATA packet.
+		 */
 		private boolean updateTID;
 		
 		
+		/**
+		 * Create a TFTPReceiveTransaction.
+		 * 
+		 * @param socket The socket to be used in the transaction
+		 * @param remoteHost The address of the peer
+		 * @param remoteTID The TID of the peer
+		 * @param destFile Path to where the received file should be stored
+		 * @param sendAckZero Whether ACK 0 should be sent before waiting for
+		 * 					  the first DATA
+		 * @param updateTID Whether the TID should be updated based on the
+		 * 					first DATA received
+		 * @param logger The logger used to print packet information
+		 * @throws FileNotFoundException
+		 */
 		public TFTPReceiveTransaction(DatagramSocket socket,
 				InetAddress remoteHost, int remoteTID,  String destFile,
 				boolean sendAckZero, boolean updateTID, Logger logger)
@@ -312,6 +438,12 @@ public abstract class TFTPTransaction implements Runnable {
 			this.file = new FileOutputStream(destFile);
 		}
 		
+		/**
+		 * Send an ACK packet.
+		 * 
+		 * @param blockNum The block number to acknowledge
+		 * @return
+		 */
 		private boolean sendAck (int blockNum)
 		{
 			try {
@@ -322,13 +454,15 @@ public abstract class TFTPTransaction implements Runnable {
 				System.exit(1);
 			} catch (IOException e) {
 				super.state = TFTPTransactionState.SOCKET_IO_ERROR;
-				e.printStackTrace();
 				return true;
 			}
 			
 			return false;
 		}
 		
+		/**
+		 * Run the transaction.
+		 */
 		public void run()
 		{
 			super.state = TFTPTransactionState.IN_PROGRESS;
