@@ -243,7 +243,7 @@ public class Client {
 		try {
 			fis = new FileInputStream(filename);
 		} catch (FileNotFoundException e) {
-			log.log(LogLevel.FATAL, "Invalid file name: file not found.  Please re-enter command with a valid file name");
+			log.log(LogLevel.WARN, "Invalid file name: file not found.  Please re-enter command with a valid file name");
 			return;
 		} 
 		log.log(LogLevel.INFO,"Successfully opened: "+filename);
@@ -262,7 +262,7 @@ public class Client {
 	    	sendReceiveSocket.receive(receivePacket);
 	    } catch(IOException e1) {
 	    	if(e1 instanceof SocketTimeoutException) {
-	    		log.log(LogLevel.FATAL,  "Socket timeout while waiting for first ACK packet.  Returning to console.");
+	    		log.log(LogLevel.ERROR,  "Socket timeout while waiting for first ACK packet.  Returning to console.");
 	    		try {
 	    			fis.close();
 	    		} catch(IOException e2) {
@@ -468,22 +468,6 @@ public class Client {
 			String args[] = {"getCmd", filepath, dest};
 			getCmd(c, args);
 			
-			/*
-			// Read Request
-			TFTPPacket.RRQ readPacket = new TFTPPacket.RRQ(filepath, TFTPPacket.TFTPMode.NETASCII);
-			sendPacket = new DatagramPacket(readPacket.toBytes(), readPacket.size(), serverAddress, serverPort);
-			
-			log.logPacket(LogLevel.INFO, sendPacket, readPacket, false, "server");
-
-			try {
-				sendReceiveSocket.send(sendPacket);
-			} catch(IOException e) {
-				e.printStackTrace();
-				System.exit(1);
-			}
-			log.log(LogLevel.INFO,"Request sent.  Waiting for response from server...");
-			*/
-			
 		} else if(dest.contains(":")) {		//Create and send a write request
 			String split[] = dest.split(":");
 			String addressString = split[0];
@@ -500,29 +484,10 @@ public class Client {
 			String args[] = {"putCmd", filepath, source};
 			putCmd(c, args);
 			
-			/*
-			 * Commented out for the time being in case this is needed for something
-			// Write request
-			TFTPPacket.WRQ writePacket = new TFTPPacket.WRQ(filepath, TFTPPacket.TFTPMode.parseFromString("netascii"));
-			sendPacket = new DatagramPacket(writePacket.toBytes(), writePacket.size(), serverAddress, serverPort);
-			
-			log.logPacket(LogLevel.INFO, sendPacket, writePacket, false, "server");
-
-			try {
-				sendReceiveSocket.send(sendPacket);
-			} catch(IOException e) {
-				e.printStackTrace();
-				System.exit(1);
-			}
-			log.log(LogLevel.INFO,"Request sent.  Waiting for response from server...");
-	    	
-			write(source);
-			*/
-			
 		}
 		
-		else {	//If neither file is on the server, print an error message .
-			log.log(LogLevel.INFO,"Neither file is on the server.  Please try another command.");
+		else {	//If neither file is on the server, print an warning message and returns.
+			log.log(LogLevel.WARN,"Neither file is on the server.  Please try another command.");
 		}
 		return;
 	}
@@ -562,7 +527,7 @@ public class Client {
 
 	private void setQuietCmd (Console c, String[] args) {
 		c.println("Running in quiet mode.");
-		log.setVerboseLevel(LogLevel.FATAL);
+		log.setVerboseLevel(LogLevel.WARN);
 	}
 	
 	private void putCmd (Console c, String[] args) {
@@ -781,7 +746,7 @@ public class Client {
 		log.log(LogLevel.INFO,"Setting up Client...");
 		
 		int serverPort = 69;
-		LogLevel verboseLevel = LogLevel.FATAL;
+		LogLevel verboseLevel = LogLevel.WARN;
 		String logFilePath = "";
 		
 		//Setting up the parsing options
@@ -850,14 +815,14 @@ public class Client {
 			try {
 				client.setServerAddress(InetAddress.getByName(positionalArgs[0]));
 			} catch (UnknownHostException e) {
-				log.log(LogLevel.FATAL, "Invalid server: \"" + positionalArgs[0] + "\"");
+				log.log(LogLevel.WARN, "Invalid server: \"" + positionalArgs[0] + "\"");
 			}
 		} else if (positionalArgs.length == 2) {
 			// Source and destination files specified
 			client.buildRequest(positionalArgs[0], positionalArgs[1], console);
 		} else if (positionalArgs.length > 2) {
 			// Too many arguments
-			log.log(LogLevel.FATAL,"Too many files specified, entering interactive mode.");
+			log.log(LogLevel.WARN,"Too many files specified, entering interactive mode.");
 		}
 
 		// Start console UI thread
