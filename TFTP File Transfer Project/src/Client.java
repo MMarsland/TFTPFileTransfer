@@ -787,14 +787,14 @@ public class Client {
 		
 		Option serverPortOption = Option.builder("p").argName("server port")
                 .hasArg()
-                .desc("the port number of the servers listener")
+                .desc("the port number of the server's listener")
                 .type(Integer.TYPE)
                 .build();
 
 		Option logFilePathOption = Option.builder("l").argName("log file path")
                 .hasArg()
-                .desc("the port number of the servers listener")
-                .type(Integer.TYPE)
+                .desc("The log file the client writes to")
+                .type(String.class)
                 .build();
 		
 		Options options = new Options();
