@@ -588,9 +588,53 @@ public class Client {
 			System.exit(1);
 		}
 		
-		log.log(5,"Request sent.  Waiting for response from server...");
     	
-		write(args[1]);
+		try {
+			TFTPTransaction transaction =
+					new TFTPTransaction.TFTPSendTransaction(sendReceiveSocket,
+							serverAddress, serverPort, args[1], true,
+							Client.log);
+			
+			transaction.run();
+			
+			// Print success message if transfer is complete or error message if
+			// transfer has failed.
+			
+			switch (transaction.getState()) {
+			case BLOCK_ZERO_TIMEOUT:
+				c.println("File transfer failed. Server did not respond to request.");
+				break;
+			case COMPLETE:
+				c.println("File transfer complete.");
+				break;
+			case FILE_IO_ERROR:
+				c.println("File transfer failed. File IO error.");
+				break;
+			case FILE_TOO_LARGE:
+				c.println("File transfer failed. File too large.");
+				break;
+			case LAST_BLOCK_ACK_TIMEOUT:
+				c.println("File transfer may have failed. Timed out waiting for server to acknowledge last block.");
+				break;
+			case RECEIVED_BAD_PACKET:
+				c.println("File transfer failed. Received invalid packet.");
+				break;
+			case SOCKET_IO_ERROR:
+				c.println("File transfer failed. Socket IO error.");
+				break;
+			case TIMEOUT:
+				c.println("File transfer failed. Timed out waiting for server.");
+				break;
+			default:
+				c.println(String.format(
+						"File transfer failed. Unkown error occured: \"%s\"", 
+						transaction.getState().toString()));
+				break;
+			
+			}
+		} catch (FileNotFoundException e) {
+			c.println(String.format("File not found: \"%s\".", args[1]));
+		}
 	}
 	
 	private void getCmd (Console c, String[] args) {
@@ -631,12 +675,52 @@ public class Client {
 			e.printStackTrace();
 			System.exit(1);
 		}
-		
-			log.log(5,"Request sent.  Waiting for response from server...");
-		
-		read(localFile);
+
+		try {
+			TFTPTransaction transaction =
+					new TFTPTransaction.TFTPReceiveTransaction(
+							sendReceiveSocket, serverAddress, serverPort,
+							localFile, false, true, Client.log);
+
+			transaction.run();
+
+			// Print success message if transfer is complete or error message if
+			// transfer has failed.
+
+			switch (transaction.getState()) {
+			case BLOCK_ZERO_TIMEOUT:
+				c.println("File transfer failed. Server did not respond to request.");
+				break;
+			case COMPLETE:
+				c.println("File transfer complete.");
+				break;
+			case FILE_IO_ERROR:
+				c.println("File transfer failed. File IO error.");
+				break;
+			case FILE_TOO_LARGE:
+				c.println("File transfer failed. File too large.");
+				break;
+			case RECEIVED_BAD_PACKET:
+				c.println("File transfer failed. Received invalid packet.");
+				break;
+			case SOCKET_IO_ERROR:
+				c.println("File transfer failed. Socket IO error.");
+				break;
+			case TIMEOUT:
+				c.println("File transfer failed. Timed out waiting for server.");
+				break;
+			default:
+				c.println(String.format(
+						"File transfer failed. Unkown error occured: \"%s\"", 
+						transaction.getState().toString()));
+				break;
+
+			}
+		} catch (FileNotFoundException e) {
+			c.println(String.format("File not found: \"%s\".", args[1]));
+		}
 	}
-	
+
 	private void connectCmd (Console c, String[] args) {
 		if (args.length < 2) {
 			// Not enough arguments
