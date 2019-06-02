@@ -40,7 +40,7 @@ public class Client {
 	}
 	
 
-	public Client(int serverPort, int verboseLevel, String logFilePath)
+	public Client(int serverPort, LogLevel verboseLevel, String logFilePath)
 	{
 		this.serverPort = serverPort;
 		
@@ -48,7 +48,7 @@ public class Client {
 		
 		log.setLogFile(logFilePath);
 		
-		log.log(5,"Setting up send/receive socket.");
+		log.log(LogLevel.INFO,"Setting up send/receive socket.");
 		
 		try {	//Setting up the socket that will send/receive packets
 			sendReceiveSocket = new DatagramSocket();
@@ -69,13 +69,13 @@ public class Client {
 	public void read(String filename)
 	{
 		
-		log.log(5,"Reading from server file");
+		log.log(LogLevel.INFO,"Reading from server file");
 		
 		FileOutputStream fos = null;
 		try {
 			fos = new FileOutputStream(filename);
 		} catch (FileNotFoundException e) {
-			log.log(0, "Invalid file name: file not found.  Please re-enter a valid file name");
+			log.log(LogLevel.FATAL, "Invalid file name: file not found.  Please re-enter a valid file name");
 			return;
 		}
 		
@@ -88,7 +88,7 @@ public class Client {
 		int blockNum = 0;
 		int lastBlock = 0;
 
-		log.log(5,"File ready to be written! filename: "+filename);
+		log.log(LogLevel.INFO,"File ready to be written! filename: "+filename);
 		
 		// Receive data and send acks
 		boolean moreToWrite = true;
@@ -97,7 +97,7 @@ public class Client {
 		int resendCount = 0;
 		while (moreToWrite) {
 			// Receive Data Packet
-			log.log(5,"Waiting for data packet");
+			log.log(LogLevel.INFO,"Waiting for data packet");
 			
 			acknowledged = false;
 			
@@ -112,7 +112,7 @@ public class Client {
 					if(e1 instanceof SocketTimeoutException) {
 						//If no data blocks have been received yet, send Client back to console to re-send request
 						if(blockNum == 0) {
-							log.log(0,  "Timeout while waiting for first DATA packet.  Client returning to console.");
+							log.log(LogLevel.FATAL,  "Timeout while waiting for first DATA packet.  Client returning to console.");
 							try {
 								fos.flush();
 								fos.close();
@@ -123,7 +123,7 @@ public class Client {
 							return;
 						} else {
 							if(resendCount > 4) {
-						    	log.log(0,"ACK has been re-sent 5 times.  Aborting file transfer.");
+						    	log.log(LogLevel.FATAL,"ACK has been re-sent 5 times.  Aborting file transfer.");
 						    	try {
 						    		fos.flush();
 									fos.close();
@@ -135,7 +135,7 @@ public class Client {
 							}
 							// Re-send the last ACK packet
 							
-							log.logPacket(5, sendPacket, ackPacket, false, "server");
+							log.logPacket(LogLevel.INFO, sendPacket, ackPacket, false, "server");
 							
 							try {
 								sendReceiveSocket.send(sendPacket);
@@ -151,13 +151,13 @@ public class Client {
 				}
 			}
 			
-			log.log(5,"Recieved packet from server");
+			log.log(LogLevel.INFO,"Recieved packet from server");
 			// Check Packet for correctness
 		    
 			try {
 				dataPacket = new TFTPPacket.DATA(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 			} catch (IllegalArgumentException e) {
-				log.log(0,"Not a DATA response to ack! :((((");
+				log.log(LogLevel.FATAL,"Not a DATA response to ack! :((((");
 				e.printStackTrace();
 				System.exit(0);
 			}
@@ -176,14 +176,14 @@ public class Client {
 				moreToWrite = false;
 			}
 			
-			log.logPacket(5, receivePacket, dataPacket, true, "server");
+			log.logPacket(LogLevel.INFO, receivePacket, dataPacket, true, "server");
 			
 			// Write into file
 			if(!duplicateData) {
 				try {
 					fos.write(dataPacket.getData(),0,dataPacket.getData().length);
 				} catch (IOException e) {
-				    log.log(0,"Failed to write data to file!");
+				    log.log(LogLevel.FATAL,"Failed to write data to file!");
 					e.printStackTrace();
 					System.exit(0);
 				}
@@ -196,11 +196,11 @@ public class Client {
 				lastBlock = blockNum;
 			}
 			
-			log.log(5,"ACK Packet Successfully Assembled");
-			log.log(5,"Last block number updated");
+			log.log(LogLevel.INFO,"ACK Packet Successfully Assembled");
+			log.log(LogLevel.INFO,"Last block number updated");
 			
 			// Send ack packet to server on serverPort
-			log.logPacket(5, sendPacket, ackPacket, false, "server");
+			log.logPacket(LogLevel.INFO, sendPacket, ackPacket, false, "server");
 			
 			try {
 				sendReceiveSocket.send(sendPacket);
@@ -211,11 +211,11 @@ public class Client {
 			
 			duplicateData = false;
 			if(moreToWrite) {
-				log.log(5,"Waiting for Next DATA Block:");
+				log.log(LogLevel.INFO,"Waiting for Next DATA Block:");
 			}
 		}
 		
-		log.log(5,"File transfer complete!");
+		log.log(LogLevel.INFO,"File transfer complete!");
 		
 		try {
 			fos.flush();
@@ -243,10 +243,10 @@ public class Client {
 		try {
 			fis = new FileInputStream(filename);
 		} catch (FileNotFoundException e) {
-			log.log(0, "Invalid file name: file not found.  Please re-enter command with a valid file name");
+			log.log(LogLevel.FATAL, "Invalid file name: file not found.  Please re-enter command with a valid file name");
 			return;
 		} 
-		log.log(5,"Successfully opened: "+filename);
+		log.log(LogLevel.INFO,"Successfully opened: "+filename);
     	
     	long timeout = 0;
 		TFTPPacket.DATA dataPacket;
@@ -262,7 +262,7 @@ public class Client {
 	    	sendReceiveSocket.receive(receivePacket);
 	    } catch(IOException e1) {
 	    	if(e1 instanceof SocketTimeoutException) {
-	    		log.log(0,  "Socket timeout while waiting for first ACK packet.  Returning to console.");
+	    		log.log(LogLevel.FATAL,  "Socket timeout while waiting for first ACK packet.  Returning to console.");
 	    		try {
 	    			fis.close();
 	    		} catch(IOException e2) {
@@ -276,26 +276,26 @@ public class Client {
 	    	}
 	    }
 	    
-		log.log(5,"Recieved packet from server.");
+		log.log(LogLevel.INFO,"Recieved packet from server.");
 	    
 	    // Parse ACK for correctness
 	    TFTPPacket.ACK ackPacket = null;
     	try {
 			ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 		} catch (IllegalArgumentException e) {
-			log.log(0,"Not an ACK Packet! :((((");
+			log.log(LogLevel.FATAL,"Not an ACK Packet! :((((");
 			e.printStackTrace();
 			System.exit(0);
 		}
     	
-    	log.logPacket(5, receivePacket, ackPacket, true, "server");
+    	log.logPacket(LogLevel.INFO, receivePacket, ackPacket, true, "server");
     	
     	if (ackPacket.getBlockNum() == 0 ) {
 			// Correct acks
-			log.log(5,"Recieved ACK for block #0.  Starting data transfer...");
+			log.log(LogLevel.INFO,"Recieved ACK for block #0.  Starting data transfer...");
 		} else {
 			// Incorrect ack
-			log.log(0,"Wrong ACK response. Incorrect block number.");
+			log.log(LogLevel.FATAL,"Wrong ACK response. Incorrect block number.");
 			try {
     			fis.close();
     		} catch (IOException e) {
@@ -333,7 +333,7 @@ public class Client {
 		    	dataPacket = new TFTPPacket.DATA(blockNum, data);
 		    	sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, serverAddress, replyPort);
 		    	
-		    	log.logPacket(5, sendPacket, dataPacket, false, "server");
+		    	log.logPacket(LogLevel.INFO, sendPacket, dataPacket, false, "server");
 		    	
 		    	try {
 		    		sendReceiveSocket.send(sendPacket);
@@ -348,7 +348,7 @@ public class Client {
 		    }
 		    
 		    // Wait for ACK
-			log.log(5,"Waiting for ACK packet...");
+			log.log(LogLevel.INFO,"Waiting for ACK packet...");
 		    
 		    // New Receive total bytes
 		    data = new byte[TFTPPacket.MAX_SIZE];
@@ -363,14 +363,14 @@ public class Client {
 		    		acknowledged = true;
 		    	} catch(IOException e1) {
 		    		if(e1 instanceof SocketTimeoutException) {
-		    			log.log(0,"Socket timeout while waiting for ACK packet.");
+		    			log.log(LogLevel.FATAL,"Socket timeout while waiting for ACK packet.");
 		    			if(resendCount > 4) {
-				    		log.log(0,"Data has been re-sent 5 times.  Aborting file transfer.");
+				    		log.log(LogLevel.FATAL,"Data has been re-sent 5 times.  Aborting file transfer.");
 				    		return;
 				    	}
-		    			log.log(5,"Re-sending last DATA packet.");
+		    			log.log(LogLevel.INFO,"Re-sending last DATA packet.");
 		    			
-		    			log.logPacket(5, sendPacket, ackPacket, false, "server");
+		    			log.logPacket(LogLevel.INFO, sendPacket, ackPacket, false, "server");
 		    			try {
 				    		sendReceiveSocket.send(sendPacket);
 				    		sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_DATA_TIMEOUT);
@@ -393,17 +393,17 @@ public class Client {
 				ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
 				replyPort = receivePacket.getPort();
 			} catch (IllegalArgumentException e) {
-				log.log(0,"Wrong Packet Recieved. Reason: Not an ackPacket");
+				log.log(LogLevel.FATAL,"Wrong Packet Recieved. Reason: Not an ackPacket");
 				e.printStackTrace();
 				System.exit(0);
 			}
-	    	log.logPacket(5, receivePacket, ackPacket, true, "server");
+	    	log.logPacket(LogLevel.INFO, receivePacket, ackPacket, true, "server");
 	    	if (ackPacket.getBlockNum() == blockNum ) {
 				// Correct ack
 	    		duplicateAck = false;
 			} else if(ackPacket.getBlockNum() < blockNum) {
 				// Duplicate ack
-				log.log(0,"Wrong ACK response. Reason: Incorrect block number.  Ignoring ACK and waiting for another packet.");
+				log.log(LogLevel.FATAL,"Wrong ACK response. Reason: Incorrect block number.  Ignoring ACK and waiting for another packet.");
 				int timeLeft = (int)(timeout - System.currentTimeMillis());
 				if(timeLeft > 0) {
 					try {
@@ -422,17 +422,17 @@ public class Client {
 				}
 				duplicateAck = true;
 			} else {
-				log.log(0,"Error: Block number higher than current block number.  Aborting transfer.");
+				log.log(LogLevel.FATAL,"Error: Block number higher than current block number.  Aborting transfer.");
 				System.exit(1);
 			}
 	    	
-			log.log(5,"Received Packet:"
+			log.log(LogLevel.INFO,"Received Packet:"
 				+"Packet Type: ACK"
 				+"Block Number: "+blockNum);
 		}
 		// All data is sent and last ACK received,
 		// Close socket, quit
-		log.log(5,"File transfer complete!");
+		log.log(LogLevel.INFO,"File transfer complete!");
 	}
 	
 	/**
@@ -473,7 +473,7 @@ public class Client {
 			TFTPPacket.RRQ readPacket = new TFTPPacket.RRQ(filepath, TFTPPacket.TFTPMode.NETASCII);
 			sendPacket = new DatagramPacket(readPacket.toBytes(), readPacket.size(), serverAddress, serverPort);
 			
-			log.logPacket(5, sendPacket, readPacket, false, "server");
+			log.logPacket(LogLevel.INFO, sendPacket, readPacket, false, "server");
 
 			try {
 				sendReceiveSocket.send(sendPacket);
@@ -481,7 +481,7 @@ public class Client {
 				e.printStackTrace();
 				System.exit(1);
 			}
-			log.log(5,"Request sent.  Waiting for response from server...");
+			log.log(LogLevel.INFO,"Request sent.  Waiting for response from server...");
 			*/
 			
 		} else if(dest.contains(":")) {		//Create and send a write request
@@ -506,7 +506,7 @@ public class Client {
 			TFTPPacket.WRQ writePacket = new TFTPPacket.WRQ(filepath, TFTPPacket.TFTPMode.parseFromString("netascii"));
 			sendPacket = new DatagramPacket(writePacket.toBytes(), writePacket.size(), serverAddress, serverPort);
 			
-			log.logPacket(5, sendPacket, writePacket, false, "server");
+			log.logPacket(LogLevel.INFO, sendPacket, writePacket, false, "server");
 
 			try {
 				sendReceiveSocket.send(sendPacket);
@@ -514,7 +514,7 @@ public class Client {
 				e.printStackTrace();
 				System.exit(1);
 			}
-			log.log(5,"Request sent.  Waiting for response from server...");
+			log.log(LogLevel.INFO,"Request sent.  Waiting for response from server...");
 	    	
 			write(source);
 			*/
@@ -522,7 +522,7 @@ public class Client {
 		}
 		
 		else {	//If neither file is on the server, print an error message .
-			log.log(5,"Neither file is on the server.  Please try another command.");
+			log.log(LogLevel.INFO,"Neither file is on the server.  Please try another command.");
 		}
 	}
 	
@@ -537,12 +537,13 @@ public class Client {
 			System.exit(1);
 		}
 		
+		log.endLog();
 		System.exit(0);
 	}
 	
 	private void setVerboseCmd (Console c, String[] args) {
 		c.println("Running in verbose mode.");
-		log.setVerboseLevel(5);
+		log.setVerboseLevel(LogLevel.INFO);
 	}
 	
 	private void setLogfileCmd (Console c, String[] args) {
@@ -560,7 +561,7 @@ public class Client {
 
 	private void setQuietCmd (Console c, String[] args) {
 		c.println("Running in quiet mode.");
-		log.setVerboseLevel(0);
+		log.setVerboseLevel(LogLevel.FATAL);
 	}
 	
 	private void putCmd (Console c, String[] args) {
@@ -593,7 +594,7 @@ public class Client {
 		TFTPPacket.WRQ writePacket = new TFTPPacket.WRQ(remoteFile, TFTPPacket.TFTPMode.NETASCII);
 		DatagramPacket request = new DatagramPacket(writePacket.toBytes(), writePacket.size(), serverAddress, serverPort);
 		
-		log.logPacket(5, request, writePacket, false, "server");
+		log.logPacket(LogLevel.INFO, request, writePacket, false, "server");
 		
 		try {
 			sendReceiveSocket.send(request);
@@ -681,7 +682,7 @@ public class Client {
 		TFTPPacket.RRQ readPacket = new TFTPPacket.RRQ(args[1], TFTPPacket.TFTPMode.NETASCII);
 		DatagramPacket request = new DatagramPacket(readPacket.toBytes(), readPacket.size(), serverAddress, serverPort);
 		
-		log.logPacket(5, request, readPacket, false, "server");
+		log.logPacket(LogLevel.INFO, request, readPacket, false, "server");
 		
 		try {
 			sendReceiveSocket.send(request);
@@ -776,10 +777,10 @@ public class Client {
 	}
 	
 	public static void main(String[] args) {
-		log.log(5,"Setting up Client...");
+		log.log(LogLevel.INFO,"Setting up Client...");
 		
 		int serverPort = 69;
-		int verboseLevel = 0;
+		LogLevel verboseLevel = LogLevel.FATAL;
 		String logFilePath = "";
 		
 		//Setting up the parsing options
@@ -810,7 +811,7 @@ public class Client {
 	        line = parser.parse( options, args );
 	        
 	        if( line.hasOption("verbose")) {
-	        	verboseLevel = 5;
+	        	verboseLevel = LogLevel.INFO;
 		    }
 	        
 	        if( line.hasOption("p")) {
@@ -821,7 +822,7 @@ public class Client {
 	        	logFilePath = line.getOptionValue("l");
 	        }
 	    } catch( ParseException exp ) {
-	    	log.log(0, "Command line argument parsing failed.  Reason: " + exp.getMessage() );
+	    	log.log(LogLevel.FATAL, "Command line argument parsing failed.  Reason: " + exp.getMessage() );
 		    System.exit(1);
 	    }
 	    
@@ -848,7 +849,7 @@ public class Client {
 			try {
 				client.setServerAddress(InetAddress.getByName(positionalArgs[0]));
 			} catch (UnknownHostException e) {
-				log.log(0, "Invalid server: \"" + positionalArgs[0] + "\"");
+				log.log(LogLevel.FATAL, "Invalid server: \"" + positionalArgs[0] + "\"");
 			}
 		} else if (positionalArgs.length == 2) {
 			// Source and destination files specified
@@ -856,7 +857,7 @@ public class Client {
 			System.exit(0);
 		} else if (positionalArgs.length > 2) {
 			// Too many arguments
-			log.log(0,"Too many files specified, entering interactive mode.");
+			log.log(LogLevel.FATAL,"Too many files specified, entering interactive mode.");
 		}
 
 		// Start console UI thread
