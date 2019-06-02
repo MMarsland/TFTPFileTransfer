@@ -162,13 +162,14 @@ class ErrorInstruction {
 	
 	//All possible error types that can be created
 	enum errorTypes{
-		DROP, DUPLICATE, DELAY
+		DROP, DUPLICATE, DELAY, INVALIDATE_TID, INVALIDATE_OPCODE, INVALIDATE_MODE, INVALIDATE_SHRINK, 
+		INVALIDATE_RMZ, INVALIDATE_APPEND, INVALIDATE_BLOCKNUM, INVALIDATE_ERRORNUM
 	}
 	
 	packetTypes packetType;
 	errorTypes errorType;
 	int packetNumber;
-	int delay;
+	int param1;
 	int timesToPerform;
 	int occurances;
 	int skipped = 0;
@@ -178,25 +179,57 @@ class ErrorInstruction {
 	 * @param packetType the type of packet this error applies to
 	 * @param errorType the type of error that should occur
 	 * @param packetNumber the block number of the packet (for DATA and ACK) or the number of packets to skip before causing error (RRQ, WRQ, ERROR)
-	 * @param delay how much delay to add (for DELAY and DUPLICATE only)
+	 * @param param1 first command parameter that is an int
 	 * @param timesToPerform how many times to create this error (negative is infinite)
 	 */
-	ErrorInstruction(packetTypes packetType, errorTypes errorType, int packetNumber, int delay, int timesToPerform)
+	ErrorInstruction(packetTypes packetType, errorTypes errorType, int packetNumber, int param1, int timesToPerform)
 	{
 		if(packetNumber < 0) {
 			throw new IllegalArgumentException("packet number can't be less than 0");
 		}
-		if(delay < 0) {
-			throw new IllegalArgumentException("delay can't be less than 0");
-		}
 		if(timesToPerform == 0 ) {
 			throw new IllegalArgumentException("cant perform error 0 times");
+		}
+		if(packetType == packetTypes.DATA && packetNumber == 0) {
+			throw new IllegalArgumentException("DATA packet can not have block number 0");
+		}
+		if(errorType == errorTypes.INVALIDATE_RMZ) {
+			if(packetType == packetTypes.DATA || packetType == packetTypes.ACK) {
+				throw new IllegalArgumentException("command not applicable to packet type");
+			}
+			if(packetType == packetTypes.ERROR && param1 != 0) {
+				throw new IllegalArgumentException("invalid parameter for Error packet type");
+			}
+			if(param1 <= 0 && (packetType == packetTypes.RRQ || packetType == packetTypes.WRQ)) {
+				throw new IllegalArgumentException("invalid parameter for '0' to remove");
+			}
+			if(param1 >= 3 && (packetType == packetTypes.RRQ || packetType == packetTypes.WRQ)) {
+				throw new IllegalArgumentException("invalid parameter for '0' to remove");
+			}
+		}
+		if(errorType == errorTypes.INVALIDATE_APPEND && param1 == 0) {
+			throw new IllegalArgumentException("must append at least one byte");
+		}
+		if(errorType == errorTypes.INVALIDATE_BLOCKNUM && !(packetType == packetTypes.DATA || packetType == packetTypes.ACK)) {
+			throw new IllegalArgumentException("command not applicable to packet type");
+		}
+		if(errorType == errorTypes.INVALIDATE_ERRORNUM && packetType != packetTypes.ERROR) {
+			throw new IllegalArgumentException("command not applicable to packet type");
+		}
+		if(param1 <= 0 && (errorType == errorTypes.INVALIDATE_BLOCKNUM || errorType == errorTypes.INVALIDATE_ERRORNUM)) {
+			throw new IllegalArgumentException("new number must be greater than 0");
+		}
+		if(param1 >= 65536 && (errorType == errorTypes.INVALIDATE_BLOCKNUM || errorType == errorTypes.INVALIDATE_ERRORNUM)) {
+			throw new IllegalArgumentException("new number must be less than 65536");
+		}
+		if(errorType == errorTypes.INVALIDATE_MODE && !(packetType == packetTypes.RRQ || packetType == packetTypes.WRQ)) {
+			throw new IllegalArgumentException("command not applicable to packet type");
 		}
 		
 		this.packetType = packetType;
 		this.errorType = errorType;
 		this.packetNumber = packetNumber;
-		this.delay = delay;
+		this.param1 = param1;
 		this.timesToPerform = timesToPerform;
 	}
 	
@@ -219,7 +252,7 @@ class ErrorInstruction {
 			return false;
 		}
 		return this.packetNumber == error.packetNumber &&
-				this.delay == error.delay &&
+				this.param1 == error.param1 &&
 				this.timesToPerform == error.timesToPerform &&
 				this.occurances == error.occurances;
 	}
@@ -232,68 +265,145 @@ class ErrorInstruction {
 		
 		switch(errorType) {
 		case DROP:
-			desc += "Drop ";
+			desc = "Drop " + getPacketName(packetType) + " " + packetNumber + ". ";
 			break;
 		case DUPLICATE:
-			desc += "Duplicate ";
+			desc = "Duplicate " + getPacketName(packetType) + " " + packetNumber + " with " + param1 + " ms between packets. ";
 			break;
 		case DELAY:
-			desc += "Delay ";
+			desc = "Delay " + getPacketName(packetType) + " " + packetNumber + " by " + param1 + " ms. ";
 			break;
-		}
-		
-		switch(packetType) {
-		case RRQ:
-			desc += "RRQ packet ";
+		case INVALIDATE_TID:
+			desc = "Invalidate the TID of " + getPacketName(packetType) + " " + packetNumber + ". ";
 			break;
-		case WRQ:
-			desc += "WRQ packet ";
+		case INVALIDATE_OPCODE:
+			desc = "Invalidate the opcode of " + getPacketName(packetType) + " " + packetNumber + ". ";
 			break;
-		case DATA:
-			desc += "DATA packet ";
+		case INVALIDATE_MODE:
+			desc = "Invalidate the mode of " + getPacketName(packetType) + " " + packetNumber + ". ";
 			break;
-		case ACK:
-			desc += "ACK packet ";
+		case INVALIDATE_SHRINK:
+			desc = "Shrink " + getPacketName(packetType) + " " + packetNumber + " to less than its minimum size. ";
 			break;
-		case ERROR:
-			desc += "ERROR packet ";
+		case INVALIDATE_RMZ:
+			if(param1 == 0) {
+				desc = "Remove the '0' byte in " + getPacketName(packetType) + " " + packetNumber + ". ";
+			}
+			else if(param1 == 1) {
+				desc = "Remove the 1st '0' byte in " + getPacketName(packetType) + " " + packetNumber + ". ";
+			}
+			else if(param1 == 2) {
+				desc = "Remove the 2nd '0' byte in " + getPacketName(packetType) + " " + packetNumber + ". ";
+			}
 			break;
-		}
-		
-		desc += packetNumber;
-		
-		if(errorType == errorTypes.DELAY) {
-			desc += " by " + delay + " ms";
-		}
-		else if(errorType == errorTypes.DUPLICATE) {
-			desc += " with " + delay + " ms between packets";
+		case INVALIDATE_APPEND:
+			desc = "Append " + param1 + " bytes of random data to " + getPacketName(packetType) + " " + packetNumber + ". ";
+			break;
+		case INVALIDATE_BLOCKNUM:
+			desc = "Replace the block number of " + getPacketName(packetType) + " " + packetNumber + " with " + param1 + ". ";
+			break;
+		case INVALIDATE_ERRORNUM:
+			desc = "Replace the error number of " + getPacketName(packetType) + " " + packetNumber + " with " + param1 + ". ";
+			break;
 		}
 		
 		if(timesToPerform < 0) {
-			desc += ". Repeat forever.";
+			desc += "Repeat forever.";
 		}
 		else {
-			desc += ". Perform " + timesToPerform + " time(s), " + (timesToPerform - occurances) + " remaining.";
+			desc += "Perform " + timesToPerform + " time(s), " + (timesToPerform - occurances) + " remaining.";
 		}
 		return desc;
 	}
 	
 	/**
-	 * Converts a string into an ErrorType
-	 * @param typeString a string representing the error type
-	 * @return the errorType enum corresponding to the string
+	 * Modifies the data in a packet according to the error
+	 * @param packet The packet whose data should be modified
+	 * @return the modified data
 	 */
-	public static errorTypes getErrorType(String typeString) {
-		switch(typeString.toLowerCase()) {
-		case "drop":
-			return errorTypes.DROP;
-		case "duplicate":
-			return errorTypes.DUPLICATE;
-		case "delay":
-			return errorTypes.DELAY;
-		default:
-			return null;
+	public byte[] modifyPacket(DatagramPacket packet) {
+		
+		if(this.errorType == errorTypes.INVALIDATE_APPEND) {
+			byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength() + this.param1);
+			
+			int i;
+			for(i = packet.getLength(); i < temp.length; i++) {
+				temp[i] = (byte)((Math.random() * 254) + 1);
+			}
+			return temp;
 		}
+		else if(this.errorType == errorTypes.INVALIDATE_BLOCKNUM) {
+			//Replace the block number with the one provided by the user
+			byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
+			if(packet.getLength() > 3) {
+				temp[2] = (byte)(param1>>8);
+				temp[3] = (byte)(param1);
+				return temp;
+			}
+		}
+		else if(this.errorType == errorTypes.INVALIDATE_ERRORNUM) {
+			//Replace the error number with the one provided by the user
+			byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
+			if(packet.getLength() > 3) {
+				temp[2] = (byte)(param1>>8);
+				temp[3] = (byte)(param1);
+				return temp;
+			}
+		}
+		else if(this.errorType == errorTypes.INVALIDATE_MODE) {
+			//Remove the mode string to invalidate it
+			byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
+			if(temp.length > 6) {
+				int start;
+				//Find the start of the mode string
+				for(start=2; (start < packet.getLength()) && temp[start] != 0; start++) {}
+				
+				//Copy everything except the mode string into a new array
+				byte[] toReturn = new byte[start + 2];
+				System.arraycopy(temp, 0, toReturn, 0, start);
+				toReturn[toReturn.length-1] = 0;
+				return toReturn;
+			}
+		}
+		else if(this.errorType == errorTypes.INVALIDATE_OPCODE) {
+			//Replace the first byte of the opcode with a random number
+			byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
+			if(packet.getLength() > 0) {
+				temp[0] = (byte)((Math.random() * 254) + 1);
+				return temp;
+			}
+		}
+		else if(this.errorType == errorTypes.INVALIDATE_RMZ) {
+			//Either removing the last 0 in an EEROR packet, or the last 0 in a WRQ/RRQ packet
+			if(this.param1 == 0 || this.param1 == 2) {
+				return Arrays.copyOf(packet.getData(), packet.getLength()-1);
+			}
+			else if(packet.getLength() > 4){ 
+				//Remove the first 0 in a WRQ/RRQ
+				byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
+				int pos;
+				
+				//Find the first 0 byte
+				for(pos=2; (pos < temp.length) && temp[pos] != 0; pos++) {}
+				
+				//Copy everything except the first 0 byte into a new array
+				byte[] toReturn = new byte[packet.getLength()-1];
+				System.arraycopy(temp, 0, toReturn, 0, pos);
+				System.arraycopy(temp, pos+1, toReturn, pos, packet.getLength()-pos-1);
+				return toReturn;
+			}
+		}
+		else if(this.errorType == errorTypes.INVALIDATE_SHRINK) {
+			if(this.packetType == packetTypes.ERROR) {
+				//Shrink error packets to 4 bytes
+				return Arrays.copyOf(packet.getData(), 4);
+			}
+			else {
+				//Shrink all other packets to 3 bytes
+				return Arrays.copyOf(packet.getData(), 3);
+			}
+		}
+		return packet.getData(); //Return the original data if the packet does not need to be modified
 	}
 	
 	/**
@@ -317,7 +427,30 @@ class ErrorInstruction {
 			return null;
 		}
 	}
+	
+	/**
+	 * Converts a packetType into a string
+	 * @param type a packetType enum to be converted into a string
+	 * @return the String corresponding to the packetType
+	 */
+	public static String getPacketName(packetTypes type) {
+		switch(type) {
+		case RRQ:
+			return "RRQ";
+		case WRQ:
+			return "WRQ";
+		case DATA:
+			return "DATA";
+		case ACK:
+			return "ACK";
+		case ERROR:
+			return "ERROR";
+		default:
+			return null;
+		}
+	}
 }
+
 
 /**
  * Handles all communications to and from the client
@@ -328,12 +461,14 @@ class ErrorSimClientListener{
 	private DatagramSocket TIDSocket;
 	private InetAddress clientAddress;
     private int clientPort;
+    private Timer sendTimer;
+    private Timer invalidTIDSendTimer;
+    private SocketListener knownPortListener;
+    private SocketListener TIDPortListener;
+    private Thread knownPortListenerThread;
+    private Thread TIDPortListenerThread;
     boolean verbose;
-    Timer timer;
-    SocketListener knownPortListener;
-    SocketListener TIDPortListener;
-    Thread knownPortListenerThread;
-    Thread TIDPortListenerThread;
+    
 	
     /**
      * Constructor for ErrorSimClientListener
@@ -360,7 +495,8 @@ class ErrorSimClientListener{
 			System.exit(1);
 	    }
 		
-		timer = new Timer();
+		sendTimer = new Timer();
+		invalidTIDSendTimer = new Timer();
 		knownPortListener = new SocketListener(knownSocket);
 		TIDPortListener = new SocketListener(TIDSocket);
 		knownPortListenerThread = new Thread(knownPortListener);
@@ -380,17 +516,29 @@ class ErrorSimClientListener{
 		
 			if(ei.errorType == ErrorInstruction.errorTypes.DUPLICATE) {
 				//Send the packet now, and its duplicate later
-				timer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), 0);
-				timer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), ei.delay);
+				sendTimer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), 0);
+				sendTimer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), ei.param1);
 			}
 			else if(ei.errorType == ErrorInstruction.errorTypes.DELAY) {
 				//Send the packet later
-				timer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), ei.delay);
+				sendTimer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), ei.param1);
+			}
+			else if(ei.errorType == ErrorInstruction.errorTypes.DROP) {
+				//Do nothing, packet does not need to be sent
+			}
+			else if(ei.errorType == ErrorInstruction.errorTypes.INVALIDATE_TID) {
+				//Send out of a different port
+				invalidTIDSendTimer.schedule(new InvalidTIDSendToClient(packet.getData(), packet.getLength()), 0);
+			}
+			else {
+				//Modify the packet according to the error and send it 
+				byte[] temp = ei.modifyPacket(packet);
+				sendTimer.schedule(new DelayedSendToClient(temp, temp.length), 0);
 			}
 		}
 		else {
 			//Send the packet to the client without introducing any errors
-			timer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), 0);
+			sendTimer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), 0);
 		}
 	}
 
@@ -564,6 +712,79 @@ class ErrorSimClientListener{
 			this.cancel();
 		}	
 	}
+	
+	/**
+	 * InvalidTIDSendToClient class allows a packet to be sent to the client with the wrong TID
+	 */
+	private class InvalidTIDSendToClient extends TimerTask{
+		byte data[];
+		int length;
+
+		/**
+		 * Creates a new task that will send a packet
+		 * @param data the data to send
+		 * @param length the length of the data
+		 */
+		public InvalidTIDSendToClient(byte data[], int length) {
+			this.data = data;
+			this.length = length;
+		}
+		
+		/**
+		 * The overridden run method for this thread
+		 */
+		public void run() {
+			DatagramSocket UnknownTIDSocket = null;
+			
+			try { //Set up the socket that will be used to send from an unknown TID
+				UnknownTIDSocket = new DatagramSocket();
+			} catch (SocketException se) { // Can't create the socket.
+				se.printStackTrace();
+				System.exit(1);
+		    }
+			
+			DatagramPacket packet = new DatagramPacket(data, length, clientAddress, clientPort);
+			
+			if(verbose) {
+	    		System.out.println("Sending packet to client with invalid TID.");
+	    	    System.out.println("To address: " + packet.getAddress());
+	    	    System.out.println("To port: " + packet.getPort());
+	    	    System.out.println("Length: " + packet.getLength());
+	    	    TFTPPacket.parse(Arrays.copyOf(data, length)).print();
+	    	    System.out.print("\n");
+	    	}
+			
+			try { //Send the packet to the client
+	    		UnknownTIDSocket.send(packet);
+	    	} catch (IOException e) {
+	    		if(e.getMessage().equals("socket closed")){
+	    			return;
+	    		}
+	    		e.printStackTrace();
+				System.exit(1);
+	    	}
+			
+			try { //Wait for a packet to come in from the client.
+				UnknownTIDSocket.receive(packet);
+	    	} catch(IOException e) {
+	    		if(e.getMessage().toLowerCase().equals("socket closed")){
+	    			return;
+	    		}
+	    		e.printStackTrace();
+				System.exit(1);
+	    	}
+	    	
+	    	if(verbose) {
+	    		System.out.println("Received packet from client in resonse to invalid TID.");
+	    	    System.out.println("From address: " + packet.getAddress());
+	    	    System.out.println("From port: " + packet.getPort());
+	    	    System.out.println("Length: " + packet.getLength());
+	    	    TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
+	    	    System.out.print("\n");
+	    	}
+			this.cancel();
+		}	
+	}
 }
 
 /**
@@ -575,8 +796,9 @@ class ErrorSimServerListener implements Runnable {
 	private InetAddress serverAddress;
     private int serverPort;
     private int serverTID;
+    private Timer sendTimer;
+    private Timer invalidTIDSendTimer;
     boolean verbose;
-    Timer timer;
 	
     /**
      * Constructor for ErrorSimServerListener
@@ -598,7 +820,8 @@ class ErrorSimServerListener implements Runnable {
 			System.exit(1);
 	    }
 		
-		timer = new Timer();
+		sendTimer = new Timer();
+		invalidTIDSendTimer = new Timer();
 	}
 	
 	/**
@@ -614,17 +837,29 @@ class ErrorSimServerListener implements Runnable {
 		
 			if(ei.errorType == ErrorInstruction.errorTypes.DUPLICATE) {
 				//Send the packet now, and its duplicate later
-				timer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), 0);
-				timer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), ei.delay);
+				sendTimer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), 0);
+				sendTimer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), ei.param1);
 			}
 			else if(ei.errorType == ErrorInstruction.errorTypes.DELAY) {
 				//Send the packet later
-				timer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), ei.delay);
+				sendTimer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), ei.param1);
+			}
+			else if(ei.errorType == ErrorInstruction.errorTypes.DROP) {
+				//Do nothing, packet does not need to be sent
+			}
+			else if(ei.errorType == ErrorInstruction.errorTypes.INVALIDATE_TID) {
+				//Send out of a different port
+				invalidTIDSendTimer.schedule(new InvalidTIDSendToServer(packet.getData(), packet.getLength()), 0);
+			}
+			else {
+				//Modify the packet according to the error and send it 
+				byte[] temp = ei.modifyPacket(packet);
+				sendTimer.schedule(new DelayedSendToServer(temp, temp.length), 0);
 			}
 		}
 		else {
 			//Send the packet to the client without introducing any errors
-			timer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), 0);
+			sendTimer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), 0);
 		}
 	}
 	
@@ -732,9 +967,8 @@ class ErrorSimServerListener implements Runnable {
 		 */
 		public synchronized void run() {
 			DatagramPacket packet;
-			TFTPPacket parsedPacket = TFTPPacket.parse(Arrays.copyOf(data, length));
 			
-			if(parsedPacket instanceof TFTPPacket.WRQ || parsedPacket instanceof TFTPPacket.RRQ) {
+			if(length > 1 && (data[1] == 1 || data[1] == 2)) {
 				packet = new DatagramPacket(data, length, serverAddress, serverPort);
 			}
 			else {
@@ -758,6 +992,85 @@ class ErrorSimServerListener implements Runnable {
 	    		}
 	    		e.printStackTrace();
 				System.exit(1);
+	    	}
+			this.cancel();
+		}	
+	}
+	
+	/**
+	 * InvalidTIDSendToServer class allows a packet to be sent to the client with the wrong TID
+	 */
+	private class InvalidTIDSendToServer extends TimerTask{
+		byte data[];
+		int length;
+
+		/**
+		 * Creates a new task that will send a packet
+		 * @param data the data to send
+		 * @param length the length of the data
+		 */
+		public InvalidTIDSendToServer(byte data[], int length) {
+			this.data = data;
+			this.length = length;
+		}
+		
+		/**
+		 * The overridden run method for this thread
+		 */
+		public void run() {
+			DatagramSocket UnknownTIDSocket = null;
+			DatagramPacket packet;
+			
+			try { //Set up the socket that will be used to send from an unknown TID
+				UnknownTIDSocket = new DatagramSocket();
+			} catch (SocketException se) { // Can't create the socket.
+				se.printStackTrace();
+				System.exit(1);
+		    }
+			
+			if(length > 1 && (data[1] == 1 || data[1] == 2)) {
+				packet = new DatagramPacket(data, length, serverAddress, serverPort);
+			}
+			else {
+				packet = new DatagramPacket(data, length, serverAddress, serverTID);
+			}
+			
+			if(verbose) {
+	    		System.out.println("Sending packet to server with invalid TID.");
+	    	    System.out.println("To address: " + packet.getAddress());
+	    	    System.out.println("To port: " + packet.getPort());
+	    	    System.out.println("Length: " + packet.getLength());
+	    	    TFTPPacket.parse(Arrays.copyOf(data, length)).print();
+	    	    System.out.print("\n");
+	    	}
+			
+			try { //Send the packet to the server
+	    		UnknownTIDSocket.send(packet);
+	    	} catch (IOException e) {
+	    		if(e.getMessage().equals("socket closed")){
+	    			return;
+	    		}
+	    		e.printStackTrace();
+				System.exit(1);
+	    	}
+			
+			try { //Wait for a packet to come in from the server.
+				UnknownTIDSocket.receive(packet);
+	    	} catch(IOException e) {
+	    		if(e.getMessage().toLowerCase().equals("socket closed")){
+	    			return;
+	    		}
+	    		e.printStackTrace();
+				System.exit(1);
+	    	}
+	    	
+	    	if(verbose) {
+	    		System.out.println("Received packet from server in resonse to invalid TID.");
+	    	    System.out.println("From address: " + packet.getAddress());
+	    	    System.out.println("From port: " + packet.getPort());
+	    	    System.out.println("Length: " + packet.getLength());
+	    	    TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
+	    	    System.out.print("\n");
 	    	}
 			this.cancel();
 		}	
@@ -921,9 +1234,11 @@ public class ErrorSim {
 	private void dropCmd (Console c, String[] args) {
 		if(args.length > 4) {
 			c.println("Error: Too many parameters.");
-		} else if(args.length < 4){
+		} 
+		else if(args.length < 4){
 			c.println("Error: Not enough parameters.");
-		} else {
+		} 
+		else {
 			if(ErrorInstruction.getPacketType(args[1]) == null) {
 				c.println("Error: Invalid packet type");
 				return;
@@ -932,12 +1247,12 @@ public class ErrorSim {
 			try {
 				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
 						ErrorInstruction.errorTypes.DROP, 	//Error type
-						Integer.parseInt(args[2]),			//Affected packet type
+						Integer.parseInt(args[2]),			//Packet number
 						0,									//Time delay - not used here
 						Integer.parseInt(args[3])));		//How many times to perform
 			}
 			catch(IllegalArgumentException e) {
-				c.println("Error: Invalid argument");
+				c.println("Could not create error: " + e.getMessage());
 			}
 		}
 	}
@@ -946,10 +1261,10 @@ public class ErrorSim {
 	private void delayCmd (Console c, String[] args) {
 		if(args.length > 5) {
 			c.println("Error: Too many parameters.");
-		}
+		} 
 		else if(args.length < 5){
 			c.println("Error: Not enough parameters.");
-		}
+		} 
 		else {
 			if(ErrorInstruction.getPacketType(args[1]) == null) {
 				c.println("Error: Invalid packet type");
@@ -959,12 +1274,12 @@ public class ErrorSim {
 			try {
 				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
 						ErrorInstruction.errorTypes.DELAY, 	//Error type
-						Integer.parseInt(args[2]),			//Affected packet type
+						Integer.parseInt(args[2]),			//Packet number
 						Integer.parseInt(args[3]),			//Time delay
 						Integer.parseInt(args[4])));		//How many times to perform
 			}
 			catch(IllegalArgumentException e) {
-				c.println("Error: Invalid argument");
+				c.println("Could not create error: " + e.getMessage());
 			}
 		}
 	}
@@ -973,7 +1288,7 @@ public class ErrorSim {
 	private void duplicateCmd (Console c, String[] args) {
 		if(args.length > 5) {
 			c.println("Error: Too many parameters.");
-		}
+		} 
 		else if(args.length < 5){
 			c.println("Error: Not enough parameters.");
 		}
@@ -986,16 +1301,247 @@ public class ErrorSim {
 			try {
 				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
 						ErrorInstruction.errorTypes.DUPLICATE, 	//Error type
-						Integer.parseInt(args[2]),			//Affected packet type
-						Integer.parseInt(args[3]),			//Time delay
-						Integer.parseInt(args[4])));		//How many times to perform
+						Integer.parseInt(args[2]),				//Packet number
+						Integer.parseInt(args[3]),				//Time delay
+						Integer.parseInt(args[4])));			//How many times to perform
 			}
 			catch(IllegalArgumentException e) {
-				c.println("Error: Invalid argument");
+				c.println("Could not create error: " + e.getMessage());
 			}
 		}
 	}
 	
+	//Handles the invd_tid command
+	private void invdTIDCmd (Console c, String[] args) {
+		if(args.length > 4) {
+			c.println("Error: Too many parameters.");
+		}
+		else if(args.length < 4){
+			c.println("Error: Not enough parameters.");
+		}
+		else {
+			if(ErrorInstruction.getPacketType(args[1]) == null) {
+				c.println("Error: Invalid packet type");
+				return;
+			}
+			
+			try {
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+						ErrorInstruction.errorTypes.INVALIDATE_TID, //Error type
+						Integer.parseInt(args[2]),					//Packet Number
+						0,											//param1 - not used here
+						Integer.parseInt(args[3])));				//How many times to perform
+			}
+			catch(IllegalArgumentException e) {
+				c.println("Could not create error: " + e.getMessage());
+			}
+		}
+	}
+	
+	//Handles the invd_opcode command
+	private void invdOpcodeCmd (Console c, String[] args) {
+		if(args.length > 4) {
+			c.println("Error: Too many parameters.");
+			return;
+		}
+		else if(args.length < 4){
+			c.println("Error: Not enough parameters.");
+			return;
+		}
+		else {
+			if(ErrorInstruction.getPacketType(args[1]) == null) {
+				c.println("Error: Invalid packet type");
+				return;
+			}
+			
+			try {
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+						ErrorInstruction.errorTypes.INVALIDATE_OPCODE,	//Error type
+						Integer.parseInt(args[2]),						//Packet Number
+						0,												//param1 - not used here
+						Integer.parseInt(args[3])));					//How many times to perform
+			}
+			catch(IllegalArgumentException e) {
+				c.println("Could not create error: " + e.getMessage());
+			}
+		}
+	}
+	
+	//Handles the invd_mode command
+	private void invdModeCmd (Console c, String[] args) {
+		if(args.length > 4) {
+			c.println("Error: Too many parameters.");
+		}
+		else if(args.length < 4){
+			c.println("Error: Not enough parameters.");
+		}
+		else {
+			if(ErrorInstruction.getPacketType(args[1]) == null) {
+				c.println("Error: Invalid packet type");
+				return;
+			}
+			
+			try {
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+						ErrorInstruction.errorTypes.INVALIDATE_MODE,	//Error type
+						Integer.parseInt(args[2]),						//Packet Number
+						0,												//param1 - not used here
+						Integer.parseInt(args[3])));					//How many times to perform
+			}
+			catch(IllegalArgumentException e) {
+				c.println("Could not create error: " + e.getMessage());
+			}
+		}				
+	}
+	
+	//Handles the invd_shrink command
+	private void invdShrinkCmd (Console c, String[] args) {
+		if(args.length > 4) {
+			c.println("Error: Too many parameters.");
+		}
+		else if(args.length < 4){
+			c.println("Error: Not enough parameters.");
+		}
+		else {
+			if(ErrorInstruction.getPacketType(args[1]) == null) {
+				c.println("Error: Invalid packet type");
+				return;
+			}
+			
+			try {
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+						ErrorInstruction.errorTypes.INVALIDATE_SHRINK,	//Error type
+						Integer.parseInt(args[2]),						//Packet Number
+						0,												//param1 - not used here
+						Integer.parseInt(args[3])));					//How many times to perform
+			}
+			catch(IllegalArgumentException e) {
+				c.println("Could not create error: " + e.getMessage());
+			}
+		}					
+	}
+	
+	//Handles the invd_rmz command
+	private void invdRmzCmd (Console c, String[] args) {
+		if(args.length > 5) {
+			c.println("Error: Too many parameters.");
+		}
+		else if(args.length < 4 || (args.length == 4 && (args[1].toLowerCase().equals("wrq") || args[2].toLowerCase().equals("rrq")))){
+			c.println("Error: Not enough parameters.");
+		}
+		else {
+			if(ErrorInstruction.getPacketType(args[1]) == null) {
+				c.println("Error: Invalid packet type");
+				return;
+			}
+			if(args.length == 5) {
+				try {
+					errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+							ErrorInstruction.errorTypes.INVALIDATE_RMZ,	//Error type
+							Integer.parseInt(args[2]),					//Packet Number
+							Integer.parseInt(args[3]),					//param1 - new which zero byte to remove (1 or 2)
+							Integer.parseInt(args[4])));				//How many times to perform
+				}
+				catch(IllegalArgumentException e) {
+					c.println("Could not create error: " + e.getMessage());
+				}
+			}
+			else {
+				try {
+					errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+							ErrorInstruction.errorTypes.INVALIDATE_RMZ,	//Error type
+							Integer.parseInt(args[2]),					//Packet Number
+							0,											//param1 - not used here
+							Integer.parseInt(args[3])));				//How many times to perform
+				}
+				catch(IllegalArgumentException e) {
+					c.println("Could not create error: " + e.getMessage());
+				}
+			}
+		}					
+	}
+	
+	//Handles the invd_append command
+	private void invdAppendCmd (Console c, String[] args) {
+		if(args.length > 5) {
+			c.println("Error: Too many parameters.");
+		}
+		else if(args.length < 5){
+			c.println("Error: Not enough parameters.");
+		}
+		else {
+			if(ErrorInstruction.getPacketType(args[1]) == null) {
+				c.println("Error: Invalid packet type");
+				return;
+			}
+			
+			try {
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+						ErrorInstruction.errorTypes.INVALIDATE_APPEND,	//Error type
+						Integer.parseInt(args[2]),						//Packet Number
+						Integer.parseInt(args[3]),						//param1 - how many bytes to append
+						Integer.parseInt(args[4])));					//How many times to perform
+			}
+			catch(IllegalArgumentException e) {
+				c.println("Could not create error: " + e.getMessage());
+			}
+		}					
+	}
+	
+	//Handles the invd_blocknum command
+	private void invdBlocknumCmd (Console c, String[] args) {
+		if(args.length > 5) {
+			c.println("Error: Too many parameters.");
+		}
+		else if(args.length < 5){
+			c.println("Error: Not enough parameters.");
+		}
+		else {
+			if(ErrorInstruction.getPacketType(args[1]) == null) {
+				c.println("Error: Invalid packet type");
+				return;
+			}
+			
+			try {
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+						ErrorInstruction.errorTypes.INVALIDATE_BLOCKNUM,	//Error type
+						Integer.parseInt(args[2]),							//Packet Number
+						Integer.parseInt(args[3]),							//param1 - new block number
+						Integer.parseInt(args[4])));						//How many times to perform
+			}
+			catch(IllegalArgumentException e) {
+				c.println("Could not create error: " + e.getMessage());
+			}
+		}					
+	}
+	
+	//Handles the invd_errornum command
+	private void invdErrornumCmd (Console c, String[] args) {
+		if(args.length > 5) {
+			c.println("Error: Too many parameters.");
+		}
+		else if(args.length < 5){
+			c.println("Error: Not enough parameters.");
+		}
+		else {
+			if(ErrorInstruction.getPacketType(args[1]) == null) {
+				c.println("Error: Invalid packet type");
+				return;
+			}
+			
+			try {
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+						ErrorInstruction.errorTypes.INVALIDATE_ERRORNUM,	//Error type
+						Integer.parseInt(args[2]),							//Packet Number
+						Integer.parseInt(args[3]),							//param1 - new error number
+						Integer.parseInt(args[4])));						//How many times to perform
+			}
+			catch(IllegalArgumentException e) {
+				c.println("Could not create error: " + e.getMessage());
+			}
+		}						
+	}
+		
 	//Handles the errors command
 	private void errorsCmd (Console c, String[] args) {
 		c.println(errors.toString());
@@ -1003,28 +1549,89 @@ public class ErrorSim {
 	
 	//Handles the help command
 	private void helpCmd (Console c, String[] args) {
-		c.println("The following is a list of commands and thier usage:");
+		c.println("The following is a list of commands and their usage:");
+		c.println("");
 		c.println("shutdown - Closes the error simulator program.");
+		c.println("");
 		c.println("verbose - Makes the error simulator output more detailed information.");
+		c.println("");
 		c.println("quiet - Makes the error simulator output only basic information.");
-		c.println("clientport [x] - Outputs the port currently being used to listen to requests "
-				+ "from the client if x is not provided. If parameter x is provided, then the port "
-				+ "is changed to x.");
-		c.println("serverport [x] - Outputs the port currently being used to forward requests "
-				+ "to the server if x is not provided. If parameter x is provided, then the port "
-				+ "is changed to x.");
-		c.println("serverip [x] - Outputs the IP address currently being used to communicate with "
-				+ "the server if x is not provided. If parameter x is provided, then the IP address "
-				+ "is changed to x.");
-		c.println("drop [A B C] - Drops a packet. A = packet type, B = packet number, C = # of times to create error.");
-		c.println("	Valid packet types are RRQ, WRQ, DATA, ACK, ERROR. C < 0 is infinite.");
-		c.println("delay [A B C D] - Delays a packet. A = packet type, B = packet number, C = delay time (ms), D = # of times to create error.");
-		c.println("	Valid packet types are RRQ, WRQ, DATA, ACK, ERROR. D < 0 is infinite.");
-		c.println("duplicate [A B C D] - Duplicates a packet. A = packet type, B = packet number, C = time between packets (ms), D = # of times to create error.");
-		c.println("	Valid packet types are RRQ, WRQ, DATA, ACK, ERROR. D < 0 is infinite.");
-		c.println("help - Shows help information.");
-	}
-	
+		c.println("");
+		c.println("clientport[x] - Outputs the port used to listen to requests from the client.");
+		c.println("                If parameter X is provided, then the port is changed to X.");
+		c.println("");
+		c.println("serverport[x] - Outputs the port on the server the ErrorSim communicates with.");
+		c.println("                If parameter X is provided, then the port is changed to X.");
+		c.println("");
+		c.println("serverip[x] - Outputs the IP address for the server.");
+		c.println("              If parameter X is provided, then the address is changed to X.");
+		c.println("");
+		c.println("drop[packet type][packet number][# of times] - drops a packet.");
+		c.println("    [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
+		c.println("    [packet number] - the packets block number, or the nth packet seen.");
+		c.println("    [# of times] - how many times this error should be created.");
+		c.println("");
+		c.println("delay[packet type][packet number][delay][# of times] - delays a packet.");
+		c.println("     [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
+		c.println("     [packet number] - the packets block number, or the nth packet seen.");
+		c.println("     [delay] - time in ms between duplicated packets.");
+		c.println("     [# of times] - how many times this error should be created.");
+		c.println("");
+		c.println("duplicate[packet type][packet number][delay][# of times] - duplicates a packet.");
+		c.println("         [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
+		c.println("     	[packet number] - the packets block number, or the nth packet seen.");
+		c.println("     	[delay] - time in ms between duplicated packets.");
+		c.println("     	[# of times] - how many times this error should be created.");
+		c.println("");
+		c.println("tid[packet type][packet number][# of times] - invalidates TID for a packet.");
+		c.println("   [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
+		c.println("   [packet number] - the packets block number, or the nth packet seen.");
+		c.println("   [# of times] - how many times this error should be created.");
+		c.println("");
+		c.println("opcode[packet type][packet number][# of times] - invalidates opcode for a packet");
+		c.println("      [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
+		c.println("      [packet number] - the packets block number, or the nth packet seen.");
+		c.println("      [# of times] - how many times this error should be created.");
+		c.println("");
+		c.println("mode[packet type][packet number][# of times] - invalidates mode for a packet.");
+		c.println("    [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
+		c.println("    [packet number] - the packets block number, or the nth packet seen.");
+		c.println("    [# of times] - how many times this error should be created.");
+		c.println("    NOTE: This command is only applicable to RRQ and WRQ packets.");
+		c.println("");
+		c.println("shrink[packet type][packet number][# of times] - shrinks packet below min size.");
+		c.println("      [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
+		c.println("      [packet number] - the packets block number, or the nth packet seen.");
+		c.println("      [# of times] - how many times this error should be created.");
+		c.println("");
+		c.println("rmz[packet type][packet number][pos][# of times] - removes '0' byte from packet.");
+		c.println("   [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
+		c.println("   [packet number] - the packets block number, or the nth packet seen.");
+		c.println("   [pos] - which '0' byte to remove. 1 for 1st, 2 for 2nd.");
+		c.println("   [# of times] - how many times this error should be created.");
+		c.println("   NOTE: This command is only applicable to RRQ, WRQ and ERROR packets. Do not");
+		c.println("         specify [pos] for an error packet as there is only one '0' byte.");
+		c.println("");
+		c.println("append[packet type][packet number][# of bytes][# of times] - append random data.");
+		c.println("      [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
+		c.println("      [packet number] - the packets block number, or the nth packet seen.");
+		c.println("      [# of bytes] - how many bytes to append to the packet.");
+		c.println("      [# of times] - how many times this error should be created.");
+		c.println("");
+		c.println("blocknum[packet type][packet number][new][# of times] - changes block number.");
+		c.println("        [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
+		c.println("        [packet number] - the packets block number, or the nth packet seen.");
+		c.println("        [new] - the new block number.");
+		c.println("        [# of times] - how many times this error should be created.");
+		c.println("");
+		c.println("errornum[packet type][packet number][new][# of times] - changes error number.");
+		c.println("        [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
+		c.println("        [packet number] - the packets block number, or the nth packet seen.");
+		c.println("        [new] - the new error number.");
+		c.println("        [# of times] - how many times this error should be created.");
+		c.println("");
+		c.println("help - Displays this message.");
+	}	
 
 	/**
 	 * main function for the error simulator
@@ -1124,6 +1731,14 @@ public class ErrorSim {
 				Map.entry("drop", errorSim::dropCmd),
 				Map.entry("delay", errorSim::delayCmd),
 				Map.entry("duplicate", errorSim::duplicateCmd),
+				Map.entry("tid", errorSim::invdTIDCmd),
+				Map.entry("opcode", errorSim::invdOpcodeCmd),
+				Map.entry("mode", errorSim::invdModeCmd),
+				Map.entry("shrink", errorSim::invdShrinkCmd),
+				Map.entry("rmz", errorSim::invdRmzCmd),
+				Map.entry("append", errorSim::invdAppendCmd),
+				Map.entry("blocknum", errorSim::invdBlocknumCmd),
+				Map.entry("errornum", errorSim::invdErrornumCmd),
 				Map.entry("errors", errorSim::errorsCmd),
 				Map.entry("help", errorSim::helpCmd)
 				);

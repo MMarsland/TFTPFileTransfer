@@ -53,7 +53,6 @@ public class Server {
 				System.exit(1);
 			}
 			c.println("Server shutdown.");
-			System.exit(0);
 		}
 	}
 
