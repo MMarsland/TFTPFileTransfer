@@ -61,7 +61,8 @@ public class Client {
 	
 	/**
 	 * Method to read a file from the server.  The Client must already have the server
-	 * address and port #.
+	 * address and port #.  This has been replaced with TFTPTransaction methods and is
+	 * not being used for transfers.
 	 * 
 	 * @param filename Filepath to the client-side file that will be written to
 	 */
@@ -229,7 +230,8 @@ public class Client {
 	
 	/**
 	 * Method to write a file to the server.  The Client must already have the server
-	 * address and port #.
+	 * address and port #.  This has been replaced with TFTPTransaction methods and is
+	 * not being used for transfers.
 	 * 
 	 * @param filename Filepath to the client-side file that will be read from
 	 */
@@ -432,16 +434,18 @@ public class Client {
 		// Close socket, quit
 		log.log(5,"File transfer complete!");
 	}
-		
-	public void buildRequest(String source, String dest)
+	
+	/**
+	 * Checks the specified filepaths (source and dest) to see which one is on the server.
+	 * If source is the server file, calls getCmd().  If dest is on the server, calls putCmd().
+	 * The IP of the server is taken from the filepath to the server file.
+	 * 
+	 * @param source Filepath to the file that data will be taken from
+	 * @param dest Filepath to the file that data will be copied to
+	 * @param c Console object that will be passed to putCmd or getCmd
+	 */
+	public void buildRequest(String source, String dest, Console c)
 	{
-		/**
-		 * Checks the specified filepaths (source and dest) to see which one is on the server.
-		 * If source is the server file, creates a read request and calls read().  If dest is
-		 * on the server, creates a write request and calls write().
-		 * The IP of the server is take
-		 */
-		DatagramPacket sendPacket = null;
 		
 		/*
 		 * Checking which file (source or dest) is on the server to determine the type of
@@ -461,6 +465,10 @@ public class Client {
 				System.exit(1);
 			}
 			
+			String args[] = {"getCmd", filepath, dest};
+			getCmd(c, args);
+			
+			/*
 			// Read Request
 			TFTPPacket.RRQ readPacket = new TFTPPacket.RRQ(filepath, TFTPPacket.TFTPMode.NETASCII);
 			sendPacket = new DatagramPacket(readPacket.toBytes(), readPacket.size(), serverAddress, serverPort);
@@ -474,9 +482,7 @@ public class Client {
 				System.exit(1);
 			}
 			log.log(5,"Request sent.  Waiting for response from server...");
-			
-			read(dest);
-			
+			*/
 			
 		} else if(dest.contains(":")) {		//Create and send a write request
 			String split[] = dest.split(":");
@@ -489,7 +495,13 @@ public class Client {
 				e.printStackTrace();
 				System.exit(1);
 			}
-
+			
+			// Calls putCmd with the arguments determined from above
+			String args[] = {"putCmd", filepath, source};
+			putCmd(c, args);
+			
+			/*
+			 * Commented out for the time being in case this is needed for something
 			// Write request
 			TFTPPacket.WRQ writePacket = new TFTPPacket.WRQ(filepath, TFTPPacket.TFTPMode.parseFromString("netascii"));
 			sendPacket = new DatagramPacket(writePacket.toBytes(), writePacket.size(), serverAddress, serverPort);
@@ -505,10 +517,12 @@ public class Client {
 			log.log(5,"Request sent.  Waiting for response from server...");
 	    	
 			write(source);
+			*/
+			
 		}
 		
-		else {	//If neither file is on the server, print an error message and quit.
-			log.log(0,"Error: neither file is on the server.  Please try another command.");
+		else {	//If neither file is on the server, print an error message .
+			log.log(5,"Neither file is on the server.  Please try another command.");
 		}
 	}
 	
@@ -813,6 +827,19 @@ public class Client {
 	    
 	    Client client = new Client(serverPort,verboseLevel,logFilePath);
 	    
+	    // Create console UI
+	    Map<String, Console.CommandCallback> commands = Map.ofEntries(
+				Map.entry("shutdown", client::shutdown),
+				Map.entry("verbose", client::setVerboseCmd),
+				Map.entry("quiet", client::setQuietCmd),
+				Map.entry("logfile", client::setLogfileCmd),
+				Map.entry("put", client::putCmd),
+				Map.entry("get", client::getCmd),
+				Map.entry("connect", client::connectCmd),
+				Map.entry("help", client::helpCmd)
+				);
+
+		Console console = new Console(commands);
 	    
 	    // Get the positional arguments and perform a transaction if one is specified
 		String[] positionalArgs = line.getArgs();
@@ -825,27 +852,14 @@ public class Client {
 			}
 		} else if (positionalArgs.length == 2) {
 			// Source and destination files specified
-			client.buildRequest(positionalArgs[0], positionalArgs[1]);
+			client.buildRequest(positionalArgs[0], positionalArgs[1], console);
 			System.exit(0);
 		} else if (positionalArgs.length > 2) {
 			// Too many arguments
 			log.log(0,"Too many files specified, entering interactive mode.");
 		}
 
-		// Create and start console UI thread
-		Map<String, Console.CommandCallback> commands = Map.ofEntries(
-				Map.entry("shutdown", client::shutdown),
-				Map.entry("verbose", client::setVerboseCmd),
-				Map.entry("quiet", client::setQuietCmd),
-				Map.entry("logfile", client::setLogfileCmd),
-				Map.entry("put", client::putCmd),
-				Map.entry("get", client::getCmd),
-				Map.entry("connect", client::connectCmd),
-				Map.entry("help", client::helpCmd)
-				);
-
-		Console console = new Console(commands);
-
+		// Start console UI thread
 		Thread consoleThread = new Thread(console);
 		consoleThread.start();
 	}
