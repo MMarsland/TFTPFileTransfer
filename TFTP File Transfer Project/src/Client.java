@@ -524,6 +524,7 @@ public class Client {
 		else {	//If neither file is on the server, print an error message .
 			log.log(5,"Neither file is on the server.  Please try another command.");
 		}
+		return;
 	}
 	
 	private void shutdown (Console c, String[] args) {
@@ -853,7 +854,6 @@ public class Client {
 		} else if (positionalArgs.length == 2) {
 			// Source and destination files specified
 			client.buildRequest(positionalArgs[0], positionalArgs[1], console);
-			System.exit(0);
 		} else if (positionalArgs.length > 2) {
 			// Too many arguments
 			log.log(0,"Too many files specified, entering interactive mode.");
