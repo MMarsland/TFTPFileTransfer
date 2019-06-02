@@ -5,17 +5,12 @@ import java.net.DatagramPacket;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 
-//TODO Add logger close method to close the fileoutputstream
 public class Logger {
-	/*
-	 * Log Levels
-	 * 		0: Error that causes program to halt
-	 * 		5: General updates on status
-	 */
-	int VerboseLevel;
+	LogLevel VerboseLevel;
 	FileOutputStream file;
 	boolean fileopen;
 	public Logger() {
+		VerboseLevel = LogLevel.INFO;
 		fileopen = false;
 	}
 	
@@ -26,35 +21,30 @@ public class Logger {
 			if(file == "") {
 				System.out.println("No Log File Specified");
 			} else {
-			System.out.println("Failed to open log file");
+				System.out.println("Failed to open log file");
 			}
 		}
 	}
 
-	public void setVerboseLevel(int verboseLevel) {
+	public void setVerboseLevel(LogLevel verboseLevel) {
 		VerboseLevel = verboseLevel;
-		this.log(5, "VerboseLevel set to " + verboseLevel);
+		this.log(LogLevel.INFO, "VerboseLevel set to " + verboseLevel);
 	}
 
-	public void log(int VerboseLevel, String Content) {
+	public void log(LogLevel VerboseLevel, String Content) {
+		if(this.VerboseLevel.shouldLog(VerboseLevel)) {
+			if(VerboseLevel == LogLevel.FATAL || VerboseLevel == LogLevel.ERROR) System.err.println(Content);
+			else System.out.println(Content);
+		}
 		if(fileopen) {
-			if(VerboseLevel <= this.VerboseLevel) {
-				if(VerboseLevel == 0) System.err.println(Content);
-				else System.out.println(Content);
-			}
 				try {
 					file.write(Content.getBytes(Charset.forName("UTF-8")));
 				} catch (IOException e) {
 					System.out.println("Failed to write to log file");
 					e.printStackTrace();
 				}
-		} else {
-			if(VerboseLevel <= this.VerboseLevel) {
-				if(VerboseLevel == 0) System.err.println(Content + " (Not Writing to Log file)");
-				else System.out.println(Content + " (Not Writing to Log file)");
-			}
+			}	
 		}
-	}
 	
 	/**
 	 * Log a datagram/TFTPPacket.
@@ -70,7 +60,7 @@ public class Logger {
 	 * 						   to which this packet was sent or from which it
 	 * 						   was received
 	 */
-	public void logPacket(int level, DatagramPacket datagram, TFTPPacket packet,
+	public void logPacket(LogLevel level, DatagramPacket datagram, TFTPPacket packet,
 			boolean received, String hostFriendlyName) {
 		
 		if (packet == null) {
@@ -97,4 +87,17 @@ public class Logger {
 		
 		this.log(level, str.toString());
 	}
+	
+	public void endLog() {
+		if(!this.fileopen) {
+			return;
+		}
+		try {
+			this.file.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		this.fileopen = false;
+	}
+	
 }
