@@ -81,7 +81,7 @@ public abstract class TFTPTransaction implements Runnable {
 				
 			this.socket.send(outgoing);
 			
-			this.logger.logPacket(5, outgoing, packet, false, "peer");
+			this.logger.logPacket(LogLevel.INFO, outgoing, packet, false, "peer");
 		}
 	}
 	
@@ -135,7 +135,7 @@ public abstract class TFTPTransaction implements Runnable {
 						
 					this.socket.send(outgoing);
 					
-					this.logger.logPacket(5, outgoing, error, false, "peer");
+					this.logger.logPacket(LogLevel.INFO, outgoing, error, false, "peer");
 					
 					timeoutMillis =
 							(int)(timeoutTime - System.currentTimeMillis());
@@ -143,7 +143,7 @@ public abstract class TFTPTransaction implements Runnable {
 				}
 				
 				// Received packet from valid TID
-				this.logger.logPacket(5, received, packet, true, "peer");
+				this.logger.logPacket(LogLevel.INFO, received, packet, true, "peer");
 				
 				return packet;
 			}
