@@ -37,16 +37,18 @@ public abstract class TFTPTransaction implements Runnable {
 	}
 	
 	private void sendToRemote(TFTPPacket packet) throws IOException
-	{
+	{	
 		synchronized (this.socket) {
 			DatagramPacket outgoing = new DatagramPacket(packet.toBytes(),
 					packet.size(), this.remoteHost, this.remoteTID);
 				
 			this.socket.send(outgoing);
+			
+			this.logger.logPacket(5, outgoing, packet, false, "remote");
 		}
 	}
 	
-	private TFTPPacket receiveFromRemote(int timeout)
+	private TFTPPacket receiveFromRemote(int timeout, boolean updateTID)
 			throws SocketException, IOException, IllegalArgumentException
 	{
 		synchronized (this.socket) {
@@ -57,8 +59,16 @@ public abstract class TFTPTransaction implements Runnable {
 			
 			this.socket.receive(received);
 			
-			return TFTPPacket.parse(Arrays.copyOf(received.getData(),
+			TFTPPacket packet = TFTPPacket.parse(Arrays.copyOf(received.getData(),
 					received.getLength()));
+			
+			if (updateTID) {
+				this.remoteTID = received.getPort();
+			}
+			
+			this.logger.logPacket(5, received, packet, true, "remote");
+			
+			return packet;
 		}
 	}
 	
@@ -68,7 +78,7 @@ public abstract class TFTPTransaction implements Runnable {
 	}
 	
 	
-	public class TFTPSendTransaction extends TFTPTransaction
+	public static class TFTPSendTransaction extends TFTPTransaction
 								implements Runnable {
 		private FileInputStream file;
 		private boolean waitAckZero;
@@ -90,7 +100,9 @@ public abstract class TFTPTransaction implements Runnable {
 			if (!resend) {
 				// Read next block from file
 				try {
-					file.read(this.buffer);
+					int numBytes = file.read(this.buffer);
+					numBytes = (numBytes < 0) ? 0 : numBytes;
+					this.buffer = Arrays.copyOf(this.buffer, numBytes);
 				} catch (IOException e) {
 					// Could not read block from file
 					super.state = TFTPTransactionState.FILE_IO_ERROR;
@@ -120,7 +132,8 @@ public abstract class TFTPTransaction implements Runnable {
 				// Receive a packet
 				TFTPPacket ack;
 				try {
-					ack = super.receiveFromRemote(TFTPPacket.TFTP_TIMEOUT);
+					ack = super.receiveFromRemote(TFTPPacket.TFTP_TIMEOUT,
+							true);
 				} catch (SocketTimeoutException e) {
 					// Receive has timed out, don't bother trying again
 					super.state = TFTPTransactionState.BLOCK_ZERO_TIMEOUT;
@@ -150,7 +163,8 @@ public abstract class TFTPTransaction implements Runnable {
 			long numBlocks = 0;
 			try {
 				numBlocks = (int)
-						(file.getChannel().size() / TFTPPacket.BLOCK_SIZE);
+						((file.getChannel().size() / TFTPPacket.BLOCK_SIZE)
+								+ 1);
 			} catch (IOException e) {
 				// Didn't even manage to get the file size
 				super.state = TFTPTransactionState.FILE_IO_ERROR;
@@ -187,7 +201,7 @@ public abstract class TFTPTransaction implements Runnable {
 					
 					if (timeout > 0) {
 						try {
-							ack = super.receiveFromRemote(timeout);
+							ack = super.receiveFromRemote(timeout, false);
 						} catch (SocketTimeoutException e) {
 							// Receive has timed out, previous DATA needs to be
 							// resent
@@ -254,18 +268,21 @@ public abstract class TFTPTransaction implements Runnable {
 		}
 	}
 	
-	public class TFTPReceiveTransaction extends TFTPTransaction
+	public static class TFTPReceiveTransaction extends TFTPTransaction
 								implements Runnable {
 		private FileOutputStream file;
 		private boolean sendAckZero;
+		private boolean updateTID;
 		
 		
 		public TFTPReceiveTransaction(DatagramSocket socket,
 				InetAddress remoteHost, int remoteTID,  String destFile,
-				boolean sendAckZero, Logger logger) throws FileNotFoundException
+				boolean sendAckZero, boolean updateTID, Logger logger)
+						throws FileNotFoundException
 		{
 			super(socket, remoteHost, remoteTID, logger);
 			this.sendAckZero = sendAckZero;
+			this.updateTID = updateTID;
 			
 			this.file = new FileOutputStream(destFile);
 		}
@@ -323,7 +340,8 @@ public abstract class TFTPTransaction implements Runnable {
 					
 					if (timeout > 0) {
 						try {
-							data = super.receiveFromRemote(timeout);
+							data = super.receiveFromRemote(timeout,
+									((blockNum == 1) && this.updateTID));
 						} catch (SocketTimeoutException e) {
 							// Receive has timed out, previous ACK needs to be
 							// resent
