@@ -405,6 +405,9 @@ class ReadHandler extends RequestHandler implements Runnable {
 			// If this is the first send or if a re-send is required.
 			if (sendData) {
 				try {
+					System.out.println("Checking connection to "+ clientAddress+"::"+clientTID);
+					security.checkConnect(clientAddress.toString(), clientTID);
+					System.out.println("Checked to be correct. Sending...");
 		    		sendReceiveSocket.send(sendPacket);
 				} catch (SecurityException e) {
 					System.err.println("Failed to connect to port. Assuming that we just didn't get the last Ack...");
@@ -541,7 +544,7 @@ class ReadHandler extends RequestHandler implements Runnable {
 		    // ================SUCCESSFULLY SEND DATA=========================
 		    // Send data packet to client on Client TID
 		    if(this.verbose) {
-		    	printPacketInformation("send", "RRQ", this.filename, null, this.blockNum, len);
+		    	printPacketInformation("send", "DATA", this.filename, null, this.blockNum, len);
 			}
 		    
 		    // Send the data packet repeatedly and receive the correct ack! (Or error out!!!)
