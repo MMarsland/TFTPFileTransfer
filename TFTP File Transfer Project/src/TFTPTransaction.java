@@ -52,23 +52,48 @@ public abstract class TFTPTransaction implements Runnable {
 			throws SocketException, IOException, IllegalArgumentException
 	{
 		synchronized (this.socket) {
-			this.socket.setSoTimeout(timeout);
+			long timeoutTime = System.currentTimeMillis() + timeout;
+			int timeoutMillis = (int)(timeoutTime - System.currentTimeMillis());
 			
-			byte[] data = new byte[TFTPPacket.MAX_SIZE];
-			DatagramPacket received = new DatagramPacket(data, data.length);
-			
-			this.socket.receive(received);
-			
-			TFTPPacket packet = TFTPPacket.parse(Arrays.copyOf(received.getData(),
-					received.getLength()));
-			
-			if (updateTID) {
-				this.remoteTID = received.getPort();
+			while (timeoutMillis > 0) {
+				this.socket.setSoTimeout(timeoutMillis);
+				
+				byte[] data = new byte[TFTPPacket.MAX_SIZE];
+				DatagramPacket received = new DatagramPacket(data, data.length);
+				
+				this.socket.receive(received);
+				
+				TFTPPacket packet = TFTPPacket.parse(Arrays.copyOf(
+						received.getData(), received.getLength()));
+				
+				if (updateTID) {
+					this.remoteTID = received.getPort();
+				} else if (received.getPort() != this.remoteTID) {
+					// Got packet from wrong TID, send error to source host
+					TFTPPacket error = new TFTPPacket.ERROR(
+							TFTPPacket.TFTPError.UNKOWN_TRANSFER_ID,
+							String.format("Unkown TID: %d",
+							received.getPort()));
+					
+					DatagramPacket outgoing = new DatagramPacket(
+							error.toBytes(), error.size(),
+							received.getAddress(), received.getPort());
+						
+					this.socket.send(outgoing);
+					
+					timeoutMillis =
+							(int)(timeoutTime - System.currentTimeMillis());
+					continue;
+				}
+				
+				// Received packet from valid TID
+				this.logger.logPacket(5, received, packet, true, "remote");
+				
+				return packet;
 			}
 			
-			this.logger.logPacket(5, received, packet, true, "remote");
-			
-			return packet;
+			// Socket has timed out
+			throw new SocketTimeoutException();
 		}
 	}
 	
