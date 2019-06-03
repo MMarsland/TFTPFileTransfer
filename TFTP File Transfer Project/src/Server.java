@@ -503,6 +503,7 @@ class WriteHandler extends RequestHandler implements Runnable {
 				break;
 			case PEER_ERROR:
 				logger.log(LogLevel.FATAL, "File transfer failed. Error Packet Received from client.");
+				break;
 			case RECEIVED_BAD_PACKET:
 				logger.log(LogLevel.FATAL, "File transfer failed. Received a bad packet. Error packet sent in response.");
 				break;
@@ -518,7 +519,6 @@ class WriteHandler extends RequestHandler implements Runnable {
 						transaction.getState().toString()));
 				System.exit(1);
 				break;
-
 			}
 		} catch (FileNotFoundException e) {
 			logger.log(LogLevel.FATAL, String.format("File not found: \"%s\".", filename));
@@ -529,37 +529,3 @@ class WriteHandler extends RequestHandler implements Runnable {
 		}
 	}
 }
-
-
-
-/*
-				case COMPLETE:
-					logger.log(LogLevel.INFO, "File transfer complete.");
-					break;
-				case FILE_IO_ERROR:
-					logger.log(LogLevel.FATAL, "File transfer failed. File IO error.");
-					System.exit(1);
-					break;
-				case FILE_TOO_LARGE:
-					logger.log(LogLevel.FATAL, "File transfer failed. File too large.");
-					System.exit(1);
-					break;
-				case LAST_BLOCK_ACK_TIMEOUT:
-					logger.log(LogLevel.FATAL, "File transfer may have failed. Timed out waiting for server to acknowledge last block.");
-					break;
-				case RECEIVED_BAD_PACKET:
-					logger.log(LogLevel.FATAL, "File transfer failed. Received invalid packet.");
-					break;
-				case SOCKET_IO_ERROR:
-					logger.log(LogLevel.FATAL, "File transfer failed. Socket IO error.");
-					break;
-				case TIMEOUT:
-					logger.log(LogLevel.FATAL, "File transfer failed. Timed out waiting for server.");
-					break;
-				default:
-					logger.log(LogLevel.FATAL, String.format(
-							"File transfer failed. Unkown error occured: \"%s\"", 
-							transaction.getState().toString()));
-					System.exit(1);
-					break;
-*/
