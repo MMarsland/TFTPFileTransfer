@@ -626,6 +626,15 @@ public abstract class TFTPTransaction implements Runnable {
 							if (tftpData.getData().length <
 									TFTPPacket.BLOCK_SIZE) {
 								// Transaction complete
+								try {
+									this.file.flush();
+									this.file.close();
+								} catch (IOException e) {
+									super.state =
+											TFTPTransactionState.FILE_IO_ERROR;
+									return;
+								}
+								
 								super.state = TFTPTransactionState.COMPLETE;
 								return;
 							} else {
