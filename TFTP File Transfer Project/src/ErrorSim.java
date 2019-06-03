@@ -745,8 +745,9 @@ class ErrorSimClientListener{
 			
 			DatagramPacket packet = new DatagramPacket(data, length, clientAddress, clientPort);
 			
+			System.out.println("Sending packet to client with invalid TID.");
+			
 			if(verbose) {
-	    		System.out.println("Sending packet to client with invalid TID.");
 	    	    System.out.println("To address: " + packet.getAddress());
 	    	    System.out.println("To port: " + packet.getPort());
 	    	    System.out.println("Length: " + packet.getLength());
@@ -766,7 +767,6 @@ class ErrorSimClientListener{
 			
 			try { //Wait for a packet to come in from the client.
 				UnknownTIDSocket.receive(packet);
-				System.out.println("RECEIVED A PACKET IN RESPONSE TO UNKNOWN TID");
 	    	} catch(IOException e) {
 	    		if(e.getMessage().toLowerCase().equals("socket closed")){
 	    			return;
@@ -775,8 +775,9 @@ class ErrorSimClientListener{
 				System.exit(1);
 	    	}
 	    	
+			System.out.println("Received packet from client in resonse to invalid TID.");
+			
 	    	if(verbose) {
-	    		System.out.println("Received packet from client in resonse to invalid TID.");
 	    	    System.out.println("From address: " + packet.getAddress());
 	    	    System.out.println("From port: " + packet.getPort());
 	    	    System.out.println("Length: " + packet.getLength());
