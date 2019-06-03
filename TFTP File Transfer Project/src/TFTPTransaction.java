@@ -1,3 +1,4 @@
+import java.io.Closeable;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -14,7 +15,7 @@ import java.util.Arrays;
  * 
  * @author Samuel Dewan
  */
-public abstract class TFTPTransaction implements Runnable {
+public abstract class TFTPTransaction implements Runnable, Closeable {
 	
 	/**
 	 * Represents the state of a TFTPTransaction
@@ -224,7 +225,7 @@ public abstract class TFTPTransaction implements Runnable {
 	 * Performs a transaction where data is being sent to the remote host
 	 */
 	public static class TFTPSendTransaction extends TFTPTransaction
-								implements Runnable {
+								implements Runnable, Closeable {
 		/**
 		 * The file being sent
 		 */
@@ -469,6 +470,10 @@ public abstract class TFTPTransaction implements Runnable {
 			
 			super.state = TFTPTransactionState.COMPLETE;
 		}
+
+		public void close() throws IOException {
+			
+		}
 	}
 	
 	/**
@@ -476,7 +481,7 @@ public abstract class TFTPTransaction implements Runnable {
 	 * sent.
 	 */
 	public static class TFTPReceiveTransaction extends TFTPTransaction
-								implements Runnable {
+								implements Runnable, Closeable {
 		/**
 		 * The file in which data should be saved.
 		 */
@@ -626,15 +631,6 @@ public abstract class TFTPTransaction implements Runnable {
 							if (tftpData.getData().length <
 									TFTPPacket.BLOCK_SIZE) {
 								// Transaction complete
-								try {
-									this.file.flush();
-									this.file.close();
-								} catch (IOException e) {
-									super.state =
-											TFTPTransactionState.FILE_IO_ERROR;
-									return;
-								}
-								
 								super.state = TFTPTransactionState.COMPLETE;
 								return;
 							} else {
@@ -717,6 +713,11 @@ public abstract class TFTPTransaction implements Runnable {
 					return;
 				}
 			}
+		}
+
+		public void close() throws IOException {
+			this.file.flush();
+			this.file.close();
 		}
 	}
 }
