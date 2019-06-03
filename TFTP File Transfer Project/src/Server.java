@@ -369,10 +369,9 @@ class ReadHandler extends RequestHandler implements Runnable {
 		logger.log(LogLevel.INFO,"Handling read request.");
 		
 		// Set up and run the TFTP Transaction
-		try {
-			TFTPTransaction transaction =
-					new TFTPTransaction.TFTPSendTransaction(sendReceiveSocket,
-							clientAddress, clientTID, filename, false, logger);
+		try (TFTPTransaction transaction =
+				new TFTPTransaction.TFTPSendTransaction(sendReceiveSocket,
+						clientAddress, clientTID, filename, false, logger)) {
 			
 			transaction.run();
 			
@@ -410,6 +409,9 @@ class ReadHandler extends RequestHandler implements Runnable {
 			}
 		} catch (FileNotFoundException e) {
 			logger.log(LogLevel.FATAL, String.format("File not found: \"%s\".", filename));
+			System.exit(1);
+		} catch (IOException e) {
+			logger.log(LogLevel.FATAL, "Failed to close file when terminating transaction");
 			System.exit(1);
 		}
 	}
@@ -461,10 +463,9 @@ class WriteHandler extends RequestHandler implements Runnable {
 		logger.log(LogLevel.INFO, "Handling Write Request");
 		
 		// Set up and run the TFTP Transaction
-		try {
-			TFTPTransaction transaction =
-					new TFTPTransaction.TFTPReceiveTransaction(sendReceiveSocket,
-							clientAddress, clientTID, filename, true, false, logger);
+		try (TFTPTransaction transaction =
+				new TFTPTransaction.TFTPReceiveTransaction(sendReceiveSocket,
+						clientAddress, clientTID, filename, true, false, logger)) {
 			
 			transaction.run();
 			
@@ -502,6 +503,9 @@ class WriteHandler extends RequestHandler implements Runnable {
 			}
 		} catch (FileNotFoundException e) {
 			logger.log(LogLevel.FATAL, String.format("File not found: \"%s\".", filename));
+			System.exit(1);
+		} catch (IOException e) {
+			logger.log(LogLevel.FATAL, "Failed to close file when terminating transaction");
 			System.exit(1);
 		}
 	}
