@@ -237,20 +237,44 @@ class ServerListener implements Runnable {
 	    	try { 	    		
 	    		receiveSocket.receive(receivePacket);
 	    	} catch(IOException e) {
-	    		if(e.getMessage().equals("socket closed")) {
+	    		if(!e.getMessage().equals("socket closed")) {
+		    		e.printStackTrace();
 	    			System.exit(1);
+	    		} else {
+	    			return;
 	    		}
-	    		e.printStackTrace();
-    			System.exit(1);
 	    	}
 	    
 	        logger.log(LogLevel.INFO, "New Request Received:");
 	    
-	    	
 	    	// Parse the packet to determine the type of handler required
-	    	TFTPPacket request = null;
 	    	try {
-				request = TFTPPacket.parse(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
+				TFTPPacket request = TFTPPacket.parse(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
+				
+		    	// Create a handler thread
+				if (request instanceof TFTPPacket.RRQ) {
+					logger.log(LogLevel.QUIET, "Received a read request.");
+					logger.log(LogLevel.INFO, "Creating a read handler for this request.");
+							
+					ReadHandler handler = new ReadHandler(receivePacket, (TFTPPacket.RRQ) request, logger);
+					Thread handlerThread = new Thread(handler);
+					handlerThread.start();
+					
+		    	} else if (request instanceof TFTPPacket.WRQ) {
+					logger.log(LogLevel.QUIET, "Received a write request.");
+					logger.log(LogLevel.INFO, "Creating a write handler for this request.");
+		    		
+		    		WriteHandler handler = new WriteHandler(receivePacket, (TFTPPacket.WRQ) request, logger);
+					Thread handlerThread = new Thread(handler);
+					handlerThread.start();
+						
+		    	} else if (request instanceof TFTPPacket.DATA) {
+		    		logger.log(LogLevel.ERROR, "Error: Unexpected DATA packet as first request. Reason: Not a read or write request. Solution: Print angry message and continue.");
+		    	} else if (request instanceof TFTPPacket.ACK) {
+		    		logger.log(LogLevel.ERROR, "Error: Unexpected ACK packet as first request. Reason: Not a read or write request. Solution: Print angry message and continue.");
+		    	} else if (request instanceof TFTPPacket.ERROR) {
+		    		logger.log(LogLevel.ERROR, "Error: Unexpected ERROR packet as first request. Reason: Not a read or write request. Solution: Print angry message and continue.");
+		    	} 
 			} catch (IllegalArgumentException e) {
 				// Unknown Packet Type... (Incorrect OP Code)
 	    		logger.log(LogLevel.ERROR, "Error: Unknown Packet Type. Reason: Not a TFTP OPCode Solution: Send Error Packet in return and continue.");
@@ -267,38 +291,7 @@ class ServerListener implements Runnable {
 	    	    	ioe.printStackTrace();
 	    			System.exit(1);
 	    	    }
-	    		// Continue with request = null
 			}
-	    	// Create a handler thread
-			if (request instanceof TFTPPacket.RRQ) {
-				logger.log(LogLevel.QUIET, "Received a read request.");
-				logger.log(LogLevel.INFO, "Creating a read handler for this request.");
-						
-				ReadHandler handler = new ReadHandler(receivePacket, (TFTPPacket.RRQ) request, logger);
-				Thread handlerThread = new Thread(handler);
-				handlerThread.start();
-				
-	    	} else if (request instanceof TFTPPacket.WRQ) {
-				logger.log(LogLevel.QUIET, "Received a write request.");
-				logger.log(LogLevel.INFO, "Creating a write handler for this request.");
-	    		
-	    		WriteHandler handler = new WriteHandler(receivePacket, (TFTPPacket.WRQ) request, logger);
-				Thread handlerThread = new Thread(handler);
-				handlerThread.start();
-					
-	    	} else if (request instanceof TFTPPacket.DATA) {
-	    		logger.log(LogLevel.FATAL, "Error: Unexpected DATA packet as first request. Reason: Not a read or write request. Solution: Die");
-	    		(new IllegalArgumentException()).printStackTrace();
-	    		System.exit(1);
-	    	} else if (request instanceof TFTPPacket.ACK) {
-	    		logger.log(LogLevel.FATAL, "Error: Unexpected ACK packet as first request. Reason: Not a read or write request. Solution: Die");
-	    		(new IllegalArgumentException()).printStackTrace();
-	    		System.exit(1);
-	    	} else if (request instanceof TFTPPacket.ERROR) {
-	    		logger.log(LogLevel.FATAL, "Error: Unexpected ERROR packet as first request. Reason: Not a read or write request. Solution: Die");
-	    		(new IllegalArgumentException()).printStackTrace();
-	    		System.exit(1);
-	    	} 
 	    	// Return to listening for new requests
 	    }
 	}
@@ -378,51 +371,60 @@ class ReadHandler extends RequestHandler implements Runnable {
 		logger.log(LogLevel.INFO,"Handling read request.");
 		
 		// Set up and run the TFTP Transaction
-		try {
-			TFTPTransaction transaction =
-					new TFTPTransaction.TFTPSendTransaction(sendReceiveSocket,
-							clientAddress, clientTID, filename, false, logger);
+		try (TFTPTransaction transaction =
+				new TFTPTransaction.TFTPSendTransaction(sendReceiveSocket,
+						clientAddress, clientTID, filename, false, logger)) {
 			
 			transaction.run();
 			
 			// Print success message if transfer is complete or error message if transfer has failed.
 			switch (transaction.getState()) {
-				case COMPLETE:
-					logger.log(LogLevel.INFO, "File transfer complete.");
-					break;
-				case FILE_IO_ERROR:
-					logger.log(LogLevel.FATAL, "File transfer failed. File IO error.");
-					System.exit(1);
-					break;
-				case FILE_TOO_LARGE:
-					logger.log(LogLevel.FATAL, "File transfer failed. File too large.");
-					System.exit(1);
-					break;
-				case LAST_BLOCK_ACK_TIMEOUT:
-					logger.log(LogLevel.FATAL, "File transfer may have failed. Timed out waiting for server to acknowledge last block.");
-					System.exit(1);
-					break;
-				case RECEIVED_BAD_PACKET:
-					logger.log(LogLevel.FATAL, "File transfer failed. Received invalid packet.");
-					System.exit(1);
-					break;
-				case SOCKET_IO_ERROR:
-					logger.log(LogLevel.FATAL, "File transfer failed. Socket IO error.");
-					System.exit(1);
-					break;
-				case TIMEOUT:
-					logger.log(LogLevel.FATAL, "File transfer failed. Timed out waiting for server.");
-					System.exit(1);
-					break;
-				default:
-					logger.log(LogLevel.FATAL, String.format(
-							"File transfer failed. Unkown error occured: \"%s\"", 
-							transaction.getState().toString()));
-					System.exit(1);
-					break;
+			case COMPLETE:
+				logger.log(LogLevel.INFO, "File transfer complete.");
+				break;
+			case FILE_IO_ERROR:
+				logger.log(LogLevel.FATAL, "File transfer failed. File IO error.");
+				System.exit(1);
+				break;
+			case FILE_TOO_LARGE:
+				logger.log(LogLevel.FATAL, "File transfer failed. File too large.");
+				System.exit(1);
+				break;
+			case LAST_BLOCK_ACK_TIMEOUT:
+				logger.log(LogLevel.FATAL, "File transfer may have failed. Timed out waiting for client to acknowledge last block.");
+				break;
+			case PEER_BAD_PACKET:
+				logger.log(LogLevel.FATAL, "File transfer failed. Client received a bad packet. Error packet response received.");
+				break;
+			case PEER_DISK_FULL:
+				logger.log(LogLevel.FATAL, "File transfer failed. Client disk full.");
+				System.exit(1);
+				break;
+			case PEER_ERROR:
+				logger.log(LogLevel.FATAL, "File transfer failed. Error Packet Received from client.");
+				break;
+			case RECEIVED_BAD_PACKET:
+				logger.log(LogLevel.FATAL, "File transfer failed. Received a bad packet. Error packet sent in response.");
+				break;
+			case SOCKET_IO_ERROR:
+				logger.log(LogLevel.FATAL, "File transfer failed. Socket IO error.");
+				break;
+			case TIMEOUT:
+				logger.log(LogLevel.FATAL, "File transfer failed. Timed out waiting for client.");
+				break;
+			default:
+				logger.log(LogLevel.FATAL, String.format(
+						"File transfer failed. Unkown error occured: \"%s\"", 
+						transaction.getState().toString()));
+				System.exit(1);
+				break;
+				
 			}
 		} catch (FileNotFoundException e) {
 			logger.log(LogLevel.FATAL, String.format("File not found: \"%s\".", filename));
+			System.exit(1);
+		} catch (IOException e) {
+			logger.log(LogLevel.FATAL, "Failed to close file when terminating transaction");
 			System.exit(1);
 		}
 	}
@@ -474,51 +476,55 @@ class WriteHandler extends RequestHandler implements Runnable {
 		logger.log(LogLevel.INFO, "Handling Write Request");
 		
 		// Set up and run the TFTP Transaction
-		try {
-			TFTPTransaction transaction =
-					new TFTPTransaction.TFTPReceiveTransaction(sendReceiveSocket,
-							clientAddress, clientTID, filename, false, false, logger);
+		try (TFTPTransaction transaction =
+				new TFTPTransaction.TFTPReceiveTransaction(sendReceiveSocket,
+						clientAddress, clientTID, filename, true, false, logger)) {
 			
 			transaction.run();
 			
 			// Print success message if transfer is complete or error message if transfer has failed.
 			switch (transaction.getState()) {
-				case COMPLETE:
-					logger.log(LogLevel.INFO, "File transfer complete.");
-					break;
-				case FILE_IO_ERROR:
-					logger.log(LogLevel.FATAL, "File transfer failed. File IO error.");
-					System.exit(1);
-					break;
-				case FILE_TOO_LARGE:
-					logger.log(LogLevel.FATAL, "File transfer failed. File too large.");
-					System.exit(1);
-					break;
-				case LAST_BLOCK_ACK_TIMEOUT:
-					logger.log(LogLevel.FATAL, "File transfer may have failed. Timed out waiting for server to acknowledge last block.");
-					System.exit(1);
-					break;
-				case RECEIVED_BAD_PACKET:
-					logger.log(LogLevel.FATAL, "File transfer failed. Received invalid packet.");
-					System.exit(1);
-					break;
-				case SOCKET_IO_ERROR:
-					logger.log(LogLevel.FATAL, "File transfer failed. Socket IO error.");
-					System.exit(1);
-					break;
-				case TIMEOUT:
-					logger.log(LogLevel.FATAL, "File transfer failed. Timed out waiting for server.");
-					System.exit(1);
-					break;
-				default:
-					logger.log(LogLevel.FATAL, String.format(
-							"File transfer failed. Unkown error occured: \"%s\"", 
-							transaction.getState().toString()));
-					System.exit(1);
-					break;
+			case BLOCK_ZERO_TIMEOUT:
+				logger.log(LogLevel.FATAL, "File transfer failed. Timed out waiting for first data packet.");
+				break;
+			case COMPLETE:
+				logger.log(LogLevel.INFO, "File transfer complete.");
+				break;
+			case FILE_IO_ERROR:
+				logger.log(LogLevel.FATAL, "File transfer failed. File IO error.");
+				System.exit(1);
+				break;
+			case FILE_TOO_LARGE:
+				logger.log(LogLevel.FATAL, "File transfer failed. File too large.");
+				System.exit(1);
+				break;
+			case PEER_BAD_PACKET:
+				logger.log(LogLevel.FATAL, "File transfer failed. Client received a bad packet. Error packet response received.");
+				break;
+			case PEER_ERROR:
+				logger.log(LogLevel.FATAL, "File transfer failed. Error Packet Received from client.");
+				break;
+			case RECEIVED_BAD_PACKET:
+				logger.log(LogLevel.FATAL, "File transfer failed. Received a bad packet. Error packet sent in response.");
+				break;
+			case SOCKET_IO_ERROR:
+				logger.log(LogLevel.FATAL, "File transfer failed. Socket IO error.");
+				break;
+			case TIMEOUT:
+				logger.log(LogLevel.FATAL, "File transfer failed. Timed out waiting for client.");
+				break;
+			default:
+				logger.log(LogLevel.FATAL, String.format(
+						"File transfer failed. Unkown error occured: \"%s\"", 
+						transaction.getState().toString()));
+				System.exit(1);
+				break;
 			}
 		} catch (FileNotFoundException e) {
 			logger.log(LogLevel.FATAL, String.format("File not found: \"%s\".", filename));
+			System.exit(1);
+		} catch (IOException e) {
+			logger.log(LogLevel.FATAL, "Failed to close file when terminating transaction");
 			System.exit(1);
 		}
 	}
