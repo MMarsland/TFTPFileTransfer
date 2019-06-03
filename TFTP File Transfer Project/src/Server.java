@@ -246,11 +246,34 @@ class ServerListener implements Runnable {
 	    
 	        logger.log(LogLevel.INFO, "New Request Received:");
 	    
-	    	
 	    	// Parse the packet to determine the type of handler required
-	    	TFTPPacket request = null;
 	    	try {
-				request = TFTPPacket.parse(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
+				TFTPPacket request = TFTPPacket.parse(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
+				
+		    	// Create a handler thread
+				if (request instanceof TFTPPacket.RRQ) {
+					logger.log(LogLevel.QUIET, "Received a read request.");
+					logger.log(LogLevel.INFO, "Creating a read handler for this request.");
+							
+					ReadHandler handler = new ReadHandler(receivePacket, (TFTPPacket.RRQ) request, logger);
+					Thread handlerThread = new Thread(handler);
+					handlerThread.start();
+					
+		    	} else if (request instanceof TFTPPacket.WRQ) {
+					logger.log(LogLevel.QUIET, "Received a write request.");
+					logger.log(LogLevel.INFO, "Creating a write handler for this request.");
+		    		
+		    		WriteHandler handler = new WriteHandler(receivePacket, (TFTPPacket.WRQ) request, logger);
+					Thread handlerThread = new Thread(handler);
+					handlerThread.start();
+						
+		    	} else if (request instanceof TFTPPacket.DATA) {
+		    		logger.log(LogLevel.ERROR, "Error: Unexpected DATA packet as first request. Reason: Not a read or write request. Solution: Print angry message and continue.");
+		    	} else if (request instanceof TFTPPacket.ACK) {
+		    		logger.log(LogLevel.ERROR, "Error: Unexpected ACK packet as first request. Reason: Not a read or write request. Solution: Print angry message and continue.");
+		    	} else if (request instanceof TFTPPacket.ERROR) {
+		    		logger.log(LogLevel.ERROR, "Error: Unexpected ERROR packet as first request. Reason: Not a read or write request. Solution: Print angry message and continue.");
+		    	} 
 			} catch (IllegalArgumentException e) {
 				// Unknown Packet Type... (Incorrect OP Code)
 	    		logger.log(LogLevel.ERROR, "Error: Unknown Packet Type. Reason: Not a TFTP OPCode Solution: Send Error Packet in return and continue.");
@@ -267,38 +290,7 @@ class ServerListener implements Runnable {
 	    	    	ioe.printStackTrace();
 	    			System.exit(1);
 	    	    }
-	    		// Continue with request = null
 			}
-	    	// Create a handler thread
-			if (request instanceof TFTPPacket.RRQ) {
-				logger.log(LogLevel.QUIET, "Received a read request.");
-				logger.log(LogLevel.INFO, "Creating a read handler for this request.");
-						
-				ReadHandler handler = new ReadHandler(receivePacket, (TFTPPacket.RRQ) request, logger);
-				Thread handlerThread = new Thread(handler);
-				handlerThread.start();
-				
-	    	} else if (request instanceof TFTPPacket.WRQ) {
-				logger.log(LogLevel.QUIET, "Received a write request.");
-				logger.log(LogLevel.INFO, "Creating a write handler for this request.");
-	    		
-	    		WriteHandler handler = new WriteHandler(receivePacket, (TFTPPacket.WRQ) request, logger);
-				Thread handlerThread = new Thread(handler);
-				handlerThread.start();
-					
-	    	} else if (request instanceof TFTPPacket.DATA) {
-	    		logger.log(LogLevel.FATAL, "Error: Unexpected DATA packet as first request. Reason: Not a read or write request. Solution: Die");
-	    		(new IllegalArgumentException()).printStackTrace();
-	    		System.exit(1);
-	    	} else if (request instanceof TFTPPacket.ACK) {
-	    		logger.log(LogLevel.FATAL, "Error: Unexpected ACK packet as first request. Reason: Not a read or write request. Solution: Die");
-	    		(new IllegalArgumentException()).printStackTrace();
-	    		System.exit(1);
-	    	} else if (request instanceof TFTPPacket.ERROR) {
-	    		logger.log(LogLevel.FATAL, "Error: Unexpected ERROR packet as first request. Reason: Not a read or write request. Solution: Die");
-	    		(new IllegalArgumentException()).printStackTrace();
-	    		System.exit(1);
-	    	} 
 	    	// Return to listening for new requests
 	    }
 	}
