@@ -666,8 +666,8 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 							// Block number is too high
 							super.sendErrorPacket(
 									TFTPPacket.TFTPError.ILLEGAL_OPERATION,
-									String.format("Recevied bad DATA block. " +
-									"Expected ACK %d.", blockNum));
+									String.format("Received bad DATA block. " +
+									"Expected DATA %d.", blockNum));
 							super.state =
 									TFTPTransactionState.RECEIVED_BAD_PACKET;
 							return;
