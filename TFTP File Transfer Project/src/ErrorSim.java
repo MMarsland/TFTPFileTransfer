@@ -766,6 +766,7 @@ class ErrorSimClientListener{
 			
 			try { //Wait for a packet to come in from the client.
 				UnknownTIDSocket.receive(packet);
+				System.out.println("RECEIVED A PACKET IN RESPONSE TO UNKNOWN TID");
 	    	} catch(IOException e) {
 	    		if(e.getMessage().toLowerCase().equals("socket closed")){
 	    			return;
