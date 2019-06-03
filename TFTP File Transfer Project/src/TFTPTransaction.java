@@ -162,6 +162,23 @@ public abstract class TFTPTransaction implements Runnable {
 	}
 	
 	/**
+	 * Send an error packet to the peer
+	 * 
+	 * @param error The error type to be sent
+	 * @param description Error description to be sent
+	 */
+	private void sendErrorPacket (TFTPPacket.TFTPError error,
+			String description)
+	{
+		try {
+			TFTPPacket.ERROR packet = new TFTPPacket.ERROR(error, description);
+			this.sendToRemote(packet);
+		} catch (IOException e) {
+			// Ignore, we don't try to guaranty delivery of ERROR packets
+		}
+	}
+	
+	/**
 	 * Set the transaction state based on a received error packet.
 	 * 
 	 * @param error The error packet received
@@ -303,6 +320,10 @@ public abstract class TFTPTransaction implements Runnable {
 					super.state = TFTPTransactionState.SOCKET_IO_ERROR;
 					return;
 				} catch (IllegalArgumentException e) {
+					super.sendErrorPacket(
+							TFTPPacket.TFTPError.ILLEGAL_OPERATION,
+							String.format("Not a valid packet. " + 
+							"Expected ACK 0."));
 					super.state =
 							TFTPTransactionState.RECEIVED_BAD_PACKET;
 					return;
@@ -314,6 +335,9 @@ public abstract class TFTPTransaction implements Runnable {
 				if (!(ack instanceof TFTPPacket.ACK) ||
 						(((TFTPPacket.ACK)ack).getBlockNum() != 0)) {
 					// Got a bad packet, give up
+					super.sendErrorPacket(
+							TFTPPacket.TFTPError.ILLEGAL_OPERATION,
+							String.format("Invalid packet. Expected ACK 0."));
 					super.state = TFTPTransactionState.RECEIVED_BAD_PACKET;
 					return;
 				}
@@ -370,6 +394,10 @@ public abstract class TFTPTransaction implements Runnable {
 							super.state = TFTPTransactionState.SOCKET_IO_ERROR;
 							return;
 						} catch (IllegalArgumentException e) {
+							super.sendErrorPacket(
+									TFTPPacket.TFTPError.ILLEGAL_OPERATION,
+									String.format("Not a valid packet. " + 
+										"Expected ACK %d.", i));
 							super.state =
 									TFTPTransactionState.RECEIVED_BAD_PACKET;
 							return;
@@ -390,6 +418,10 @@ public abstract class TFTPTransaction implements Runnable {
 							continue;
 						} else if (((TFTPPacket.ACK)ack).getBlockNum() > i) {
 							// Invalid packet
+							super.sendErrorPacket(
+									TFTPPacket.TFTPError.ILLEGAL_OPERATION,
+									String.format("ACK has bad block number. " +
+											"Expected ACK %d.", i));
 							super.state =
 									TFTPTransactionState.RECEIVED_BAD_PACKET;
 							return;
@@ -400,6 +432,10 @@ public abstract class TFTPTransaction implements Runnable {
 						return;
 					} else if (ack != null) {
 						// Received something that is not an ACK
+						super.sendErrorPacket(
+								TFTPPacket.TFTPError.ILLEGAL_OPERATION,
+								String.format("Invalid packet. " +
+								"Expected ACK %d.", i));
 						super.state = TFTPTransactionState.RECEIVED_BAD_PACKET;
 						return;
 					}
@@ -550,6 +586,10 @@ public abstract class TFTPTransaction implements Runnable {
 							super.state = TFTPTransactionState.SOCKET_IO_ERROR;
 							return;
 						} catch (IllegalArgumentException e) {
+							super.sendErrorPacket(
+									TFTPPacket.TFTPError.ILLEGAL_OPERATION,
+									String.format("Not a valid packet. " +
+									"Expected DATA %d.", blockNum));
 							super.state =
 									TFTPTransactionState.RECEIVED_BAD_PACKET;
 							return;
@@ -617,6 +657,10 @@ public abstract class TFTPTransaction implements Runnable {
 							}
 						} else if (tftpData.getBlockNum() > blockNum) {
 							// Block number is too high
+							super.sendErrorPacket(
+									TFTPPacket.TFTPError.ILLEGAL_OPERATION,
+									String.format("Recevied bad DATA block. " +
+									"Expected ACK %d.", blockNum));
 							super.state =
 									TFTPTransactionState.RECEIVED_BAD_PACKET;
 							return;
@@ -627,6 +671,10 @@ public abstract class TFTPTransaction implements Runnable {
 						return;
 					} else if (data != null) {
 						// Received something that is not data
+						super.sendErrorPacket(
+								TFTPPacket.TFTPError.ILLEGAL_OPERATION,
+								String.format("Invalid packet. " +
+								"Expected ACK %d.", blockNum));
 						super.state = TFTPTransactionState.RECEIVED_BAD_PACKET;
 						return;
 					}
