@@ -570,11 +570,11 @@ public class Client {
 		}
 		
     	
-		try {
-			TFTPTransaction transaction =
-					new TFTPTransaction.TFTPSendTransaction(sendReceiveSocket,
-							serverAddress, serverPort, args[1], true,
-							Client.log);
+		try (TFTPTransaction transaction = 
+				new TFTPTransaction.TFTPSendTransaction(sendReceiveSocket,
+						serverAddress, serverPort, args[1], true,
+						Client.log);) {
+			
 			
 			transaction.run();
 			
@@ -615,6 +615,8 @@ public class Client {
 			}
 		} catch (FileNotFoundException e) {
 			c.println(String.format("File not found: \"%s\".", args[1]));
+		} catch (IOException e1) {
+			c.println("Failed to close file after transaction completed.");
 		}
 	}
 	
@@ -657,12 +659,10 @@ public class Client {
 			System.exit(1);
 		}
 
-		try {
-			TFTPTransaction transaction =
-					new TFTPTransaction.TFTPReceiveTransaction(
-							sendReceiveSocket, serverAddress, serverPort,
-							localFile, false, true, Client.log);
-
+		try (TFTPTransaction transaction =
+				new TFTPTransaction.TFTPReceiveTransaction(
+						sendReceiveSocket, serverAddress, serverPort,
+						localFile, false, true, Client.log);) {
 			transaction.run();
 
 			// Print success message if transfer is complete or error message if
@@ -699,6 +699,8 @@ public class Client {
 			}
 		} catch (FileNotFoundException e) {
 			c.println(String.format("File not found: \"%s\".", args[1]));
+		} catch (IOException e1) {
+			c.println("Failed to close file after transaction completed.");
 		}
 	}
 
