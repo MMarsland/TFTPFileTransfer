@@ -240,6 +240,8 @@ class ServerListener implements Runnable {
 	    		if(!e.getMessage().equals("socket closed")) {
 		    		e.printStackTrace();
 	    			System.exit(1);
+	    		} else {
+	    			return;
 	    		}
 	    	}
 	    
