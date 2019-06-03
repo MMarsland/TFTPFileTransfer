@@ -379,35 +379,46 @@ class ReadHandler extends RequestHandler implements Runnable {
 			
 			// Print success message if transfer is complete or error message if transfer has failed.
 			switch (transaction.getState()) {
-				case COMPLETE:
-					logger.log(LogLevel.INFO, "File transfer complete.");
-					break;
-				case FILE_IO_ERROR:
-					logger.log(LogLevel.FATAL, "File transfer failed. File IO error.");
-					System.exit(1);
-					break;
-				case FILE_TOO_LARGE:
-					logger.log(LogLevel.FATAL, "File transfer failed. File too large.");
-					System.exit(1);
-					break;
-				case LAST_BLOCK_ACK_TIMEOUT:
-					logger.log(LogLevel.FATAL, "File transfer may have failed. Timed out waiting for server to acknowledge last block.");
-					break;
-				case RECEIVED_BAD_PACKET:
-					logger.log(LogLevel.FATAL, "File transfer failed. Received invalid packet.");
-					break;
-				case SOCKET_IO_ERROR:
-					logger.log(LogLevel.FATAL, "File transfer failed. Socket IO error.");
-					break;
-				case TIMEOUT:
-					logger.log(LogLevel.FATAL, "File transfer failed. Timed out waiting for server.");
-					break;
-				default:
-					logger.log(LogLevel.FATAL, String.format(
-							"File transfer failed. Unkown error occured: \"%s\"", 
-							transaction.getState().toString()));
-					System.exit(1);
-					break;
+			case COMPLETE:
+				logger.log(LogLevel.INFO, "File transfer complete.");
+				break;
+			case FILE_IO_ERROR:
+				logger.log(LogLevel.FATAL, "File transfer failed. File IO error.");
+				System.exit(1);
+				break;
+			case FILE_TOO_LARGE:
+				logger.log(LogLevel.FATAL, "File transfer failed. File too large.");
+				System.exit(1);
+				break;
+			case LAST_BLOCK_ACK_TIMEOUT:
+				logger.log(LogLevel.FATAL, "File transfer may have failed. Timed out waiting for client to acknowledge last block.");
+				break;
+			case PEER_BAD_PACKET:
+				logger.log(LogLevel.FATAL, "File transfer failed. Client received a bad packet. Error packet response received.");
+				break;
+			case PEER_DISK_FULL:
+				logger.log(LogLevel.FATAL, "File transfer failed. Client disk full.");
+				System.exit(1);
+				break;
+			case PEER_ERROR:
+				logger.log(LogLevel.FATAL, "File transfer failed. Error Packet Received from client.");
+				break;
+			case RECEIVED_BAD_PACKET:
+				logger.log(LogLevel.FATAL, "File transfer failed. Received a bad packet. Error packet sent in response.");
+				break;
+			case SOCKET_IO_ERROR:
+				logger.log(LogLevel.FATAL, "File transfer failed. Socket IO error.");
+				break;
+			case TIMEOUT:
+				logger.log(LogLevel.FATAL, "File transfer failed. Timed out waiting for client.");
+				break;
+			default:
+				logger.log(LogLevel.FATAL, String.format(
+						"File transfer failed. Unkown error occured: \"%s\"", 
+						transaction.getState().toString()));
+				System.exit(1);
+				break;
+				
 			}
 		} catch (FileNotFoundException e) {
 			logger.log(LogLevel.FATAL, String.format("File not found: \"%s\".", filename));
@@ -473,6 +484,55 @@ class WriteHandler extends RequestHandler implements Runnable {
 			
 			// Print success message if transfer is complete or error message if transfer has failed.
 			switch (transaction.getState()) {
+			case BLOCK_ZERO_TIMEOUT:
+				logger.log(LogLevel.FATAL, "File transfer failed. Timed out waiting for first data packet.");
+				break;
+			case COMPLETE:
+				logger.log(LogLevel.INFO, "File transfer complete.");
+				break;
+			case FILE_IO_ERROR:
+				logger.log(LogLevel.FATAL, "File transfer failed. File IO error.");
+				System.exit(1);
+				break;
+			case FILE_TOO_LARGE:
+				logger.log(LogLevel.FATAL, "File transfer failed. File too large.");
+				System.exit(1);
+				break;
+			case PEER_BAD_PACKET:
+				logger.log(LogLevel.FATAL, "File transfer failed. Client received a bad packet. Error packet response received.");
+				break;
+			case PEER_ERROR:
+				logger.log(LogLevel.FATAL, "File transfer failed. Error Packet Received from client.");
+			case RECEIVED_BAD_PACKET:
+				logger.log(LogLevel.FATAL, "File transfer failed. Received a bad packet. Error packet sent in response.");
+				break;
+			case SOCKET_IO_ERROR:
+				logger.log(LogLevel.FATAL, "File transfer failed. Socket IO error.");
+				break;
+			case TIMEOUT:
+				logger.log(LogLevel.FATAL, "File transfer failed. Timed out waiting for client.");
+				break;
+			default:
+				logger.log(LogLevel.FATAL, String.format(
+						"File transfer failed. Unkown error occured: \"%s\"", 
+						transaction.getState().toString()));
+				System.exit(1);
+				break;
+
+			}
+		} catch (FileNotFoundException e) {
+			logger.log(LogLevel.FATAL, String.format("File not found: \"%s\".", filename));
+			System.exit(1);
+		} catch (IOException e) {
+			logger.log(LogLevel.FATAL, "Failed to close file when terminating transaction");
+			System.exit(1);
+		}
+	}
+}
+
+
+
+/*
 				case COMPLETE:
 					logger.log(LogLevel.INFO, "File transfer complete.");
 					break;
@@ -502,13 +562,4 @@ class WriteHandler extends RequestHandler implements Runnable {
 							transaction.getState().toString()));
 					System.exit(1);
 					break;
-			}
-		} catch (FileNotFoundException e) {
-			logger.log(LogLevel.FATAL, String.format("File not found: \"%s\".", filename));
-			System.exit(1);
-		} catch (IOException e) {
-			logger.log(LogLevel.FATAL, "Failed to close file when terminating transaction");
-			System.exit(1);
-		}
-	}
-}
+*/
