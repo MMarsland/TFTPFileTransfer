@@ -22,7 +22,9 @@ public abstract class TFTPTransaction implements Runnable {
 	public enum TFTPTransactionState {
 		INITIALIZED, IN_PROGRESS, BLOCK_ZERO_TIMEOUT, TIMEOUT,
 		LAST_BLOCK_ACK_TIMEOUT, FILE_TOO_LARGE, FILE_IO_ERROR, SOCKET_IO_ERROR,
-		RECEIVED_BAD_PACKET, COMPLETE
+		RECEIVED_BAD_PACKET, PEER_BAD_PACKET, PEER_FILE_NOT_FOUND,
+		PEER_ACCESS_VIOLATION, PEER_DISK_FULL, PEER_FILE_EXISTS, PEER_ERROR,
+		COMPLETE
 	}
 	
 	/**
@@ -102,10 +104,11 @@ public abstract class TFTPTransaction implements Runnable {
 		synchronized (this.socket) {
 			// Calculate timeout
 			long timeoutTime = System.currentTimeMillis() + timeout;
-			int timeoutMillis = (int)(timeoutTime - System.currentTimeMillis());
+			int timeoutMillis = 0;
 			
 			// Continue trying to receive until the timeout runs out
-			while (timeoutMillis > 0) {
+			while ((timeoutMillis =
+					(int)(timeoutTime - System.currentTimeMillis())) > 0) {
 				// Receive packet
 				this.socket.setSoTimeout(timeoutMillis);
 				
@@ -119,7 +122,12 @@ public abstract class TFTPTransaction implements Runnable {
 				
 				// Got packet
 				
-				if (updateTID) {
+				if (received.getAddress() != this.remoteHost) {
+					// Packet from wrong host, ignore
+					this.logger.log(LogLevel.WARN,
+							"Received packet from incorrect host, ingoring.");
+					continue;
+				} else if (updateTID) {
 					// Update remote TID to match received packet
 					this.remoteTID = received.getPort();
 				} else if (received.getPort() != this.remoteTID) {
@@ -135,15 +143,15 @@ public abstract class TFTPTransaction implements Runnable {
 						
 					this.socket.send(outgoing);
 					
-					this.logger.logPacket(LogLevel.INFO, outgoing, error, false, "peer");
+					this.logger.logPacket(LogLevel.INFO, outgoing, error, false,
+							"peer");
 					
-					timeoutMillis =
-							(int)(timeoutTime - System.currentTimeMillis());
 					continue;
 				}
 				
 				// Received packet from valid TID
-				this.logger.logPacket(LogLevel.INFO, received, packet, true, "peer");
+				this.logger.logPacket(LogLevel.INFO, received, packet, true,
+						"peer");
 				
 				return packet;
 			}
@@ -151,6 +159,36 @@ public abstract class TFTPTransaction implements Runnable {
 			// Socket has timed out
 			throw new SocketTimeoutException();
 		}
+	}
+	
+	/**
+	 * Set the transaction state based on a received error packet.
+	 * 
+	 * @param error The error packet received
+	 */
+	private void handleErrorPacket (TFTPPacket.ERROR error)
+	{ 
+		switch (error.getError()) {
+		case ACCESS_VIOLATION:
+			this.state = TFTPTransactionState.PEER_ACCESS_VIOLATION;
+			break;
+		case DISK_FULL:
+			this.state = TFTPTransactionState.PEER_DISK_FULL;
+			break;
+		case FILE_ALREADY_EXISTS:
+			this.state = TFTPTransactionState.PEER_FILE_EXISTS;
+			break;
+		case FILE_NOT_FOUND:
+			this.state = TFTPTransactionState.PEER_FILE_NOT_FOUND;
+			break;
+		case ILLEGAL_OPERATION:
+			this.state = TFTPTransactionState.PEER_BAD_PACKET;
+			break;
+		default:
+			this.state = TFTPTransactionState.PEER_ERROR;
+			break;
+		}
+		return;
 	}
 	
 	/**
@@ -356,6 +394,10 @@ public abstract class TFTPTransaction implements Runnable {
 									TFTPTransactionState.RECEIVED_BAD_PACKET;
 							return;
 						}
+					} else if (ack instanceof TFTPPacket.ERROR) {
+						// Got an error packet
+						super.handleErrorPacket((TFTPPacket.ERROR)ack);
+						return;
 					} else if (ack != null) {
 						// Received something that is not an ACK
 						super.state = TFTPTransactionState.RECEIVED_BAD_PACKET;
@@ -579,6 +621,10 @@ public abstract class TFTPTransaction implements Runnable {
 									TFTPTransactionState.RECEIVED_BAD_PACKET;
 							return;
 						}
+					} else if (data instanceof TFTPPacket.ERROR) {
+						// Got an error packet
+						super.handleErrorPacket((TFTPPacket.ERROR)data);
+						return;
 					} else if (data != null) {
 						// Received something that is not data
 						super.state = TFTPTransactionState.RECEIVED_BAD_PACKET;
