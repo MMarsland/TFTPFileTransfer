@@ -37,14 +37,14 @@ public class Logger {
 			else System.out.println(Content);
 		}
 		if(fileopen) {
-				try {
-					file.write(Content.getBytes(Charset.forName("UTF-8")));
-				} catch (IOException e) {
-					System.out.println("Failed to write to log file");
-					e.printStackTrace();
-				}
-			}	
-		}
+			try {
+				file.write(Content.getBytes(Charset.forName("UTF-8")));
+			} catch (IOException e) {
+				System.out.println("Failed to write to log file");
+				e.printStackTrace();
+			}
+		}	
+	}
 	
 	/**
 	 * Log a datagram/TFTPPacket.

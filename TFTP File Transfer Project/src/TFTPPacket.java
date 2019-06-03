@@ -1030,7 +1030,7 @@ public abstract class TFTPPacket {
 		
 		@Override
 		public int size() {
-			return this.description.length() + 4;
+			return this.description.length() + 5; // Should be plus 5? (2 for opCode, 2 for ErrorType and 1 for the terminating zero) -MM0602 
 		}
 	}
 	

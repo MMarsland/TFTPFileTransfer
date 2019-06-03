@@ -4,6 +4,7 @@ public enum LogLevel {
     INFO(5),
     WARN(4),
     ERROR(3),
+    QUIET(1),
     FATAL(0);
 
     private Integer severity;
