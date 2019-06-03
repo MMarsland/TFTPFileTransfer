@@ -681,6 +681,9 @@ public class Client {
 			case FILE_TOO_LARGE:
 				c.println("File transfer failed. File too large.");
 				break;
+			case LAST_BLOCK_ACK_TIMEOUT:
+				c.println("File transfer may have failed. Timed out waiting for server to acknowledge last block.");
+				break;
 			case RECEIVED_BAD_PACKET:
 				c.println("File transfer failed. Received invalid packet.");
 				break;
@@ -726,9 +729,17 @@ public class Client {
 			} catch (NumberFormatException e) {
 				c.println("Invalid port: \"" + args[2] + "\"");
 			}
-		} else {
-			this.serverPort = 69;
 		}
+	}
+	
+	private void setNormalCmd (Console c, String[] args) {
+		c.println("Running in normal mode (Sending to port 69)");
+		serverPort = 69;
+	}
+	
+	private void setTestCmd (Console c, String[] args) {
+		c.println("Running in test mode (Sending to port 23)");
+		serverPort = 23;
 	}
 	
 	private void helpCmd (Console c, String[] args) {
@@ -736,10 +747,13 @@ public class Client {
 		c.println("connect [server] <ip>\n\tSelect a server, if port is not specified port 69 will be used.");
 		c.println("put [local file] <remote file>\n\tSend a file to the server.");
 		c.println("get [remote file] <local file>\n\tGet a file from the server.");
-		c.println("shutdown\n\tShutdown client.");
-		c.println("verbose\n\tEnable debugging output.");
 		c.println("logfile [file path]\n\tSet the log file.");
+		c.println("verbose\n\tEnable debugging output.");
 		c.println("quiet\n\tDisable debugging output.");
+		c.println("test\n\tSets Client to send to port 23 (Error simulator port).");
+		c.println("normal\n\tSets Client to send to port 69 (Server port)");
+		c.println("shutdown\n\tShutdown client.");
+		
 	}
 	
 	public static void main(String[] args) {
@@ -799,6 +813,8 @@ public class Client {
 				Map.entry("shutdown", client::shutdown),
 				Map.entry("verbose", client::setVerboseCmd),
 				Map.entry("quiet", client::setQuietCmd),
+				Map.entry("normal", client::setNormalCmd),
+				Map.entry("test", client::setTestCmd),
 				Map.entry("logfile", client::setLogfileCmd),
 				Map.entry("put", client::putCmd),
 				Map.entry("get", client::getCmd),
