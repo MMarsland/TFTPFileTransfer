@@ -606,12 +606,26 @@ public class Client {
 			case TIMEOUT:
 				c.println("File transfer failed. Timed out waiting for server.");
 				break;
+			case PEER_ACCESS_VIOLATION:
+				c.println("File transfer failed. Server access violation.");
+				break;
+			case PEER_BAD_PACKET:
+				c.println("File transfer failed. Server received bad packet.");
+				break;
+			case PEER_DISK_FULL:
+				c.println("File transfer failed. Server disk full.");
+				break;
+			case PEER_ERROR:
+				c.println("File transfer failed. Error on server.");
+				break;
+			case PEER_FILE_EXISTS:
+				c.println("File transfer failed. File exists on server.");
+				break;
 			default:
 				c.println(String.format(
 						"File transfer failed. Unkown error occured: \"%s\"", 
 						transaction.getState().toString()));
 				break;
-			
 			}
 		} catch (FileNotFoundException e) {
 			c.println(String.format("File not found: \"%s\".", args[1]));
@@ -690,12 +704,23 @@ public class Client {
 			case TIMEOUT:
 				c.println("File transfer failed. Timed out waiting for server.");
 				break;
+			case PEER_ACCESS_VIOLATION:
+				c.println("File transfer failed. Server access violation.");
+				break;
+			case PEER_BAD_PACKET:
+				c.println("File transfer failed. Server received bad packet.");
+				break;
+			case PEER_ERROR:
+				c.println("File transfer failed. Error occured on server.");
+				break;
+			case PEER_FILE_NOT_FOUND:
+				c.println("File transfer failed. File not found on server.");
+				break;
 			default:
 				c.println(String.format(
 						"File transfer failed. Unkown error occured: \"%s\"", 
 						transaction.getState().toString()));
 				break;
-
 			}
 		} catch (FileNotFoundException e) {
 			c.println(String.format("File not found: \"%s\".", args[1]));
