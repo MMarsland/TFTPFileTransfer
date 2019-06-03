@@ -627,7 +627,12 @@ class ErrorSimClientListener{
     	    System.out.println("From address: " + packet.getAddress());
     	    System.out.println("From port: " + packet.getPort());
     	    System.out.println("Length: " + packet.getLength());
-    	    TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
+    	    try {
+    	    	TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
+	    	}
+	    	catch(IllegalArgumentException e) {
+	    		System.out.println("Invalid packet.");
+	    	}
     	    System.out.print("\n");
     	}
     	
@@ -696,7 +701,12 @@ class ErrorSimClientListener{
 	    	    System.out.println("To address: " + packet.getAddress());
 	    	    System.out.println("To port: " + packet.getPort());
 	    	    System.out.println("Length: " + packet.getLength());
-	    	    TFTPPacket.parse(Arrays.copyOf(data, length)).print();
+	    	    try {
+	    	    	TFTPPacket.parse(Arrays.copyOf(data, length)).print();
+		    	}
+		    	catch(IllegalArgumentException e) {
+		    		System.out.println("Invalid packet.");
+		    	}
 	    	    System.out.print("\n");
 	    	}
 			
@@ -751,7 +761,12 @@ class ErrorSimClientListener{
 	    	    System.out.println("To address: " + packet.getAddress());
 	    	    System.out.println("To port: " + packet.getPort());
 	    	    System.out.println("Length: " + packet.getLength());
-	    	    TFTPPacket.parse(Arrays.copyOf(data, length)).print();
+	    	    try {
+	    	    	TFTPPacket.parse(Arrays.copyOf(data, length)).print();
+		    	}
+		    	catch(IllegalArgumentException e) {
+		    		System.out.println("Invalid packet.");
+		    	}
 	    	    System.out.print("\n");
 	    	}
 			
@@ -781,7 +796,12 @@ class ErrorSimClientListener{
 	    	    System.out.println("From address: " + packet.getAddress());
 	    	    System.out.println("From port: " + packet.getPort());
 	    	    System.out.println("Length: " + packet.getLength());
-	    	    TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
+	    	    try {
+	    	    	TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
+		    	}
+		    	catch(IllegalArgumentException e) {
+		    		System.out.println("Invalid packet.");
+		    	}
 	    	    System.out.print("\n");
 	    	}
 			this.cancel();
@@ -940,7 +960,12 @@ class ErrorSimServerListener implements Runnable {
     	    System.out.println("From address: " + packet.getAddress());
     	    System.out.println("From port: " + packet.getPort());
     	    System.out.println("Length: " + packet.getLength());
-    	    TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
+    	    try {
+    	    	TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
+	    	}
+	    	catch(IllegalArgumentException e) {
+	    		System.out.println("Invalid packet.");
+	    	}
     	    System.out.print("\n");
     	}
     	
@@ -982,7 +1007,12 @@ class ErrorSimServerListener implements Runnable {
 	    	    System.out.println("To address: " + packet.getAddress());
 	    	    System.out.println("To port: " + packet.getPort());
 	    	    System.out.println("Length: " + packet.getLength());
+	    	    try {
 	    	    TFTPPacket.parse(Arrays.copyOf(data, length)).print();
+	    	    }
+	    	    catch(IllegalArgumentException e) {
+	    	    	System.out.println("Invalid packet.");
+	    	    }
 	    	    System.out.print("\n");
 	    	}
 			
@@ -1042,7 +1072,12 @@ class ErrorSimServerListener implements Runnable {
 	    	    System.out.println("To address: " + packet.getAddress());
 	    	    System.out.println("To port: " + packet.getPort());
 	    	    System.out.println("Length: " + packet.getLength());
-	    	    TFTPPacket.parse(Arrays.copyOf(data, length)).print();
+	    	    try {
+		    	    TFTPPacket.parse(Arrays.copyOf(data, length)).print();
+		    	}
+		    	catch(IllegalArgumentException e) {
+		    		System.out.println("Invalid packet.");
+		    	}
 	    	    System.out.print("\n");
 	    	}
 			
@@ -1071,7 +1106,12 @@ class ErrorSimServerListener implements Runnable {
 	    	    System.out.println("From address: " + packet.getAddress());
 	    	    System.out.println("From port: " + packet.getPort());
 	    	    System.out.println("Length: " + packet.getLength());
-	    	    TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
+	    	    try {
+	    	    	TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength())).print();
+		    	}
+		    	catch(IllegalArgumentException e) {
+		    		System.out.println("Invalid packet.");
+		    	}
 	    	    System.out.print("\n");
 	    	}
 			this.cancel();
