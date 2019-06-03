@@ -237,11 +237,10 @@ class ServerListener implements Runnable {
 	    	try { 	    		
 	    		receiveSocket.receive(receivePacket);
 	    	} catch(IOException e) {
-	    		if(e.getMessage().equals("socket closed")) {
+	    		if(!e.getMessage().equals("socket closed")) {
+		    		e.printStackTrace();
 	    			System.exit(1);
 	    		}
-	    		e.printStackTrace();
-    			System.exit(1);
 	    	}
 	    
 	        logger.log(LogLevel.INFO, "New Request Received:");
