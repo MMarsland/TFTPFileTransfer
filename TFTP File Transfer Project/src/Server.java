@@ -400,19 +400,15 @@ class ReadHandler extends RequestHandler implements Runnable {
 					break;
 				case LAST_BLOCK_ACK_TIMEOUT:
 					logger.log(LogLevel.FATAL, "File transfer may have failed. Timed out waiting for server to acknowledge last block.");
-					System.exit(1);
 					break;
 				case RECEIVED_BAD_PACKET:
 					logger.log(LogLevel.FATAL, "File transfer failed. Received invalid packet.");
-					System.exit(1);
 					break;
 				case SOCKET_IO_ERROR:
 					logger.log(LogLevel.FATAL, "File transfer failed. Socket IO error.");
-					System.exit(1);
 					break;
 				case TIMEOUT:
 					logger.log(LogLevel.FATAL, "File transfer failed. Timed out waiting for server.");
-					System.exit(1);
 					break;
 				default:
 					logger.log(LogLevel.FATAL, String.format(
@@ -496,19 +492,15 @@ class WriteHandler extends RequestHandler implements Runnable {
 					break;
 				case LAST_BLOCK_ACK_TIMEOUT:
 					logger.log(LogLevel.FATAL, "File transfer may have failed. Timed out waiting for server to acknowledge last block.");
-					System.exit(1);
 					break;
 				case RECEIVED_BAD_PACKET:
 					logger.log(LogLevel.FATAL, "File transfer failed. Received invalid packet.");
-					System.exit(1);
 					break;
 				case SOCKET_IO_ERROR:
 					logger.log(LogLevel.FATAL, "File transfer failed. Socket IO error.");
-					System.exit(1);
 					break;
 				case TIMEOUT:
 					logger.log(LogLevel.FATAL, "File transfer failed. Timed out waiting for server.");
-					System.exit(1);
 					break;
 				default:
 					logger.log(LogLevel.FATAL, String.format(
