@@ -473,7 +473,7 @@ class WriteHandler extends RequestHandler implements Runnable {
 		try {
 			TFTPTransaction transaction =
 					new TFTPTransaction.TFTPReceiveTransaction(sendReceiveSocket,
-							clientAddress, clientTID, filename, false, false, logger);
+							clientAddress, clientTID, filename, true, false, logger);
 			
 			transaction.run();
 			
