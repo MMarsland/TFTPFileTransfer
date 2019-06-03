@@ -278,6 +278,8 @@ public abstract class TFTPPacket {
 		 */
 		private OptionSet (byte[] bytes) throws IllegalArgumentException
 		{
+			this();
+			
 			int position = 0;
 			
 			while (position != bytes.length) {
@@ -1030,7 +1032,7 @@ public abstract class TFTPPacket {
 		
 		@Override
 		public int size() {
-			return this.description.length() + 5; // Should be plus 5? (2 for opCode, 2 for ErrorType and 1 for the terminating zero) -MM0602 
+			return this.description.length() + 5;
 		}
 	}
 	
