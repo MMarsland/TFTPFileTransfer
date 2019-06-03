@@ -335,7 +335,11 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 					return;
 				}
 				// Validate packet
-				if (!(ack instanceof TFTPPacket.ACK) ||
+				if (ack instanceof TFTPPacket.ERROR) {
+					// Got an error packet
+					super.handleErrorPacket((TFTPPacket.ERROR)ack);
+					return;
+				} else if (!(ack instanceof TFTPPacket.ACK) ||
 						(((TFTPPacket.ACK)ack).getBlockNum() != 0)) {
 					// Got a bad packet, give up
 					super.sendErrorPacket(
@@ -343,7 +347,7 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 							String.format("Invalid packet. Expected ACK 0."));
 					super.state = TFTPTransactionState.RECEIVED_BAD_PACKET;
 					return;
-				}
+				} 
 				// Successfully received ACK 0
 			}
 			
