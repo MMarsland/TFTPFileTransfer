@@ -122,10 +122,12 @@ public abstract class TFTPTransaction implements Runnable {
 				
 				// Got packet
 				
-				if (received.getAddress() != this.remoteHost) {
+				if (!received.getAddress().equals(this.remoteHost)) {
 					// Packet from wrong host, ignore
-					this.logger.log(LogLevel.WARN,
-							"Received packet from incorrect host, ingoring.");
+					this.logger.log(LogLevel.WARN, String.format("Received " + 
+							"packet from incorrect host (%s should be %s), " +
+							"ignoring.", received.getAddress().toString(), 
+							this.remoteHost.toString()));
 					continue;
 				} else if (updateTID) {
 					// Update remote TID to match received packet
