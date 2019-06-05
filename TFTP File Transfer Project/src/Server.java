@@ -210,6 +210,7 @@ class ServerListener implements Runnable {
 		try { 
 			receiveSocket = new DatagramSocket(listenerPort);
 		} catch (SocketException se) { // Can't create the socket.
+			logger.log(LogLevel.FATAL, "Error: SocketException. Reason: Could not create listener socket. Solution: Shutting down Server.");
 			se.printStackTrace();
 			System.exit(1);
 	    }
@@ -286,11 +287,14 @@ class ServerListener implements Runnable {
 	    			sendSocket.close();
 	    		} catch (SocketException se) { // Can't create the socket.
 	    			se.printStackTrace();
-	    			System.exit(1);
+	    			logger.log(LogLevel.ERROR, "Error: SocketException. Reason: Could not create socket. Solution: Return to Listening.");
 	    	    } catch (IOException ioe) { // Can't send the packet.
 	    	    	ioe.printStackTrace();
-	    			System.exit(1);
+	    	    	logger.log(LogLevel.ERROR, "Error: Socket IO Error. Reason: Could not send packet. Solution: Return to Listening.");
 	    	    }
+			} catch (SocketException se) {
+				se.printStackTrace();
+				logger.log(LogLevel.ERROR, "Error: SocketException. Reason: Could not create the handler's socket. Solution: Return to Listening.");
 			}
 	    	// Return to listening for new requests
 	    }
@@ -356,8 +360,9 @@ class ReadHandler extends RequestHandler implements Runnable {
 	 * @param request The formed TFTPPacket for the read request
 	 * @param verbose true enables verbose mode to output debug info, false disables verbose
 	 * mode so less information is output.
+	 * @throws SocketException 
 	 */
-	public ReadHandler(DatagramPacket receivePacket, TFTPPacket.RRQ request, Logger logger) {
+	public ReadHandler(DatagramPacket receivePacket, TFTPPacket.RRQ request, Logger logger) throws SocketException {
 		logger.log(LogLevel.INFO, "Setting up read handler.");
 		this.logger = logger;
 		this.receivePacket = receivePacket;
@@ -367,16 +372,9 @@ class ReadHandler extends RequestHandler implements Runnable {
 		this.filename =  this.request.getFilename();
 		
 		//Set up the socket that will be used to send/receive packets to/from client
-		try { 
-			this.sendReceiveSocket = new DatagramSocket();
-			// Set Timeout for the socket!
-			sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
-			
-		} catch (SocketException se) { // Can't create the socket.
-			se.printStackTrace();
-			System.exit(1);
-	    }
-	
+		this.sendReceiveSocket = new DatagramSocket();
+		// Set Timeout for the socket!
+		sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
 	}
 
 	/**
@@ -399,11 +397,11 @@ class ReadHandler extends RequestHandler implements Runnable {
 				break;
 			case FILE_IO_ERROR:
 				logger.log(LogLevel.FATAL, "File transfer failed. File IO error.");
-				System.exit(1);
+				// TODO
 				break;
 			case FILE_TOO_LARGE:
 				logger.log(LogLevel.FATAL, "File transfer failed. File too large.");
-				System.exit(1);
+				// TODO
 				break;
 			case LAST_BLOCK_ACK_TIMEOUT:
 				logger.log(LogLevel.ERROR, "File transfer may have failed. Timed out waiting for client to acknowledge last block.");
@@ -413,7 +411,7 @@ class ReadHandler extends RequestHandler implements Runnable {
 				break;
 			case PEER_DISK_FULL:
 				logger.log(LogLevel.FATAL, "File transfer failed. Client disk full.");
-				System.exit(1);
+				// TODO
 				break;
 			case PEER_ERROR:
 				logger.log(LogLevel.ERROR, "File transfer failed. Error Packet Received from client.");
@@ -431,7 +429,7 @@ class ReadHandler extends RequestHandler implements Runnable {
 				logger.log(LogLevel.FATAL, String.format(
 						"File transfer failed. Unkown error occured: \"%s\"", 
 						transaction.getState().toString()));
-				System.exit(1);
+				// TODO
 				break;
 				
 			}
@@ -460,8 +458,9 @@ class WriteHandler extends RequestHandler implements Runnable {
 	 * @param request The formed TFTPPacket for the write request
 	 * @param verbose true enables verbose mode to output debug info, false disables verbose
 	 * mode so less information is output.
+	 * @throws SocketException 
 	 */
-	public WriteHandler(DatagramPacket receivePacket, TFTPPacket.WRQ request, Logger logger) {
+	public WriteHandler(DatagramPacket receivePacket, TFTPPacket.WRQ request, Logger logger) throws SocketException {
 		logger.log(LogLevel.INFO, "Setting up Write Handler");
 		this.receivePacket = receivePacket;
 		this.request = request;
@@ -471,17 +470,10 @@ class WriteHandler extends RequestHandler implements Runnable {
 		this.filename =  this.request.getFilename();
 		this.mode = this.request.getMode();
 		
-		//Set up the socket that will be used to send/receive packets to/from client
-		try { 
-			this.sendReceiveSocket = new DatagramSocket();
-			// Set Timeout for the socket!
-			sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
-		} catch (SocketException se) { // Can't create the socket.
-			se.printStackTrace();
-			System.exit(1);
-	    }
-		
-		
+		//Set up the socket that will be used to send/receive packets to/from client 
+		this.sendReceiveSocket = new DatagramSocket();
+		// Set Timeout for the socket!
+		sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
 	}
 
 	/**
@@ -507,40 +499,40 @@ class WriteHandler extends RequestHandler implements Runnable {
 					break;
 				case FILE_IO_ERROR:
 					logger.log(LogLevel.FATAL, "File transfer failed. File IO error.");
-					System.exit(1);
+					// TODO
 					break;
 				case FILE_TOO_LARGE:
 					logger.log(LogLevel.FATAL, "File transfer failed. File too large.");
-					System.exit(1);
+					// TODO
 					break;
 				case PEER_BAD_PACKET:
-					logger.log(LogLevel.FATAL, "File transfer failed. Client received a bad packet. Error packet response received.");
+					logger.log(LogLevel.ERROR, "File transfer failed. Client received a bad packet. Error packet response received.");
 					break;
 				case PEER_ERROR:
-					logger.log(LogLevel.FATAL, "File transfer failed. Error Packet Received from client.");
+					logger.log(LogLevel.ERROR, "File transfer failed. Error Packet Received from client.");
 					break;
 				case RECEIVED_BAD_PACKET:
-					logger.log(LogLevel.FATAL, "File transfer failed. Received a bad packet. Error packet sent in response.");
+					logger.log(LogLevel.ERROR, "File transfer failed. Received a bad packet. Error packet sent in response.");
 					break;
 				case SOCKET_IO_ERROR:
-					logger.log(LogLevel.FATAL, "File transfer failed. Socket IO error.");
+					logger.log(LogLevel.ERROR, "File transfer failed. Socket IO error.");
 					break;
 				case TIMEOUT:
-					logger.log(LogLevel.FATAL, "File transfer failed. Timed out waiting for client.");
+					logger.log(LogLevel.ERROR, "File transfer failed. Timed out waiting for client.");
 					break;
 				default:
 					logger.log(LogLevel.FATAL, String.format(
 							"File transfer failed. Unkown error occured: \"%s\"", 
 							transaction.getState().toString()));
-					System.exit(1);
+					// TODO
 					break;
 			}
 		} catch (FileNotFoundException e) {
+			e.printStackTrace();
 			logger.log(LogLevel.FATAL, String.format("File not found: \"%s\".", filename));
-			System.exit(1);
+			// TODO - Send an error saying that the file could not be written?? WHY?? (Access Violation?)
 		} catch (IOException e) {
-			logger.log(LogLevel.FATAL, "Failed to close file when terminating transaction");
-			System.exit(1);
+			logger.log(LogLevel.ERROR, "Error: File Closure. Reason: Failed to close file when terminating transaction. Solution: Ending Transaction without closing file.");
 		}
 	}
 }
