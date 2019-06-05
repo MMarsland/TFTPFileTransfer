@@ -1,11 +1,11 @@
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.net.*;
-import java.util.Arrays;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.SocketException;
+import java.net.UnknownHostException;
 import java.util.Map;
-import java.net.SocketTimeoutException;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -29,7 +29,6 @@ public class Client {
 	 * This class is a single-threaded implementation of a TFTP client.
 	 * Command line arguments for the first data transfer are accepted
 	 */
-	private DatagramSocket sendReceiveSocket;
 	private int serverPort;
 	private static Logger log = new Logger();
 	
@@ -49,391 +48,8 @@ public class Client {
 		log.setLogFile(logFilePath);
 		
 		log.log(LogLevel.INFO,"Setting up send/receive socket.");
-		
-		try {	//Setting up the socket that will send/receive packets
-			sendReceiveSocket = new DatagramSocket();
-			sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
-		} catch(SocketException se) { //If the socket can't be created
-			se.printStackTrace();
-			System.exit(1);
-		}
 	}
-	
-	/**
-	 * Method to read a file from the server.  The Client must already have the server
-	 * address and port #.  This has been replaced with TFTPTransaction methods and is
-	 * not being used for transfers.
-	 * 
-	 * @param filename Filepath to the client-side file that will be written to
-	 */
-	public void read(String filename)
-	{
-		
-		log.log(LogLevel.INFO,"Reading from server file");
-		
-		FileOutputStream fos = null;
-		try {
-			fos = new FileOutputStream(filename);
-		} catch (FileNotFoundException e) {
-			log.log(LogLevel.FATAL, "Invalid file name: file not found.  Please re-enter a valid file name");
-			return;
-		}
-		
-		TFTPPacket.ACK ackPacket = new TFTPPacket.ACK(0);
-		DatagramPacket sendPacket = null;
-		byte[] data = new byte[TFTPPacket.MAX_SIZE];
-		DatagramPacket receivePacket;
-		TFTPPacket.DATA dataPacket = null;
-		int len = 0;
-		int blockNum = 0;
-		int lastBlock = 0;
 
-		log.log(LogLevel.INFO,"File ready to be written! filename: "+filename);
-		
-		// Receive data and send acks
-		boolean moreToWrite = true;
-		boolean duplicateData = false;
-		boolean acknowledged = false;
-		int resendCount = 0;
-		while (moreToWrite) {
-			// Receive Data Packet
-			log.log(LogLevel.INFO,"Waiting for data packet");
-			
-			acknowledged = false;
-			
-			receivePacket = new DatagramPacket(data, data.length);
-			
-			while(!acknowledged) {
-				try {
-					sendReceiveSocket.receive(receivePacket);
-					acknowledged = true;
-				} catch(IOException e1) {
-					// Checks if the socket timed out
-					if(e1 instanceof SocketTimeoutException) {
-						//If no data blocks have been received yet, send Client back to console to re-send request
-						if(blockNum == 0) {
-							log.log(LogLevel.FATAL,  "Timeout while waiting for first DATA packet.  Client returning to console.");
-							try {
-								fos.flush();
-								fos.close();
-							} catch (IOException e) {
-								e.printStackTrace();
-								System.exit(1);
-							}
-							return;
-						} else {
-							if(resendCount > 4) {
-						    	log.log(LogLevel.FATAL,"ACK has been re-sent 5 times.  Aborting file transfer.");
-						    	try {
-						    		fos.flush();
-									fos.close();
-								} catch (IOException e) {
-									e.printStackTrace();
-									System.exit(1);
-								}
-						    	return;
-							}
-							// Re-send the last ACK packet
-							
-							log.logPacket(LogLevel.INFO, sendPacket, ackPacket, false, "server");
-							
-							try {
-								sendReceiveSocket.send(sendPacket);
-							} catch(IOException e2) {
-								e2.printStackTrace();
-								System.exit(1);
-							}
-						}
-					} else {
-						e1.printStackTrace();
-						System.exit(1);
-					}
-				}
-			}
-			
-			log.log(LogLevel.INFO,"Recieved packet from server");
-			// Check Packet for correctness
-		    
-			try {
-				dataPacket = new TFTPPacket.DATA(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
-			} catch (IllegalArgumentException e) {
-				log.log(LogLevel.FATAL,"Not a DATA response to ack! :((((");
-				e.printStackTrace();
-				System.exit(0);
-			}
-			// Definitely data :)
-			// Strip block number & port
-			blockNum = dataPacket.getBlockNum();
-			int replyPort = receivePacket.getPort();
-			// Check if the received block is either duplicated or delayed.  If so, send an ACK 
-			// packet for it but don't write any of the data to the file.
-			if(blockNum < (lastBlock + 1)) {
-				duplicateData = true;
-			}
-			// Check size? Less than 512 == done
-			len = dataPacket.getData().length;
-			if (len < 512) {
-				moreToWrite = false;
-			}
-			
-			log.logPacket(LogLevel.INFO, receivePacket, dataPacket, true, "server");
-			
-			// Write into file
-			if(!duplicateData) {
-				try {
-					fos.write(dataPacket.getData(),0,dataPacket.getData().length);
-				} catch (IOException e) {
-				    log.log(LogLevel.FATAL,"Failed to write data to file!");
-					e.printStackTrace();
-					System.exit(0);
-				}
-			}
-			
-			// Send Acknowledgement packet with block number
-			ackPacket = new TFTPPacket.ACK(blockNum);
-			sendPacket = new DatagramPacket(ackPacket.toBytes(), ackPacket.toBytes().length, serverAddress, replyPort);
-			if(!duplicateData) {
-				lastBlock = blockNum;
-			}
-			
-			log.log(LogLevel.INFO,"ACK Packet Successfully Assembled");
-			log.log(LogLevel.INFO,"Last block number updated");
-			
-			// Send ack packet to server on serverPort
-			log.logPacket(LogLevel.INFO, sendPacket, ackPacket, false, "server");
-			
-			try {
-				sendReceiveSocket.send(sendPacket);
-			} catch (IOException e) {
-				e.printStackTrace();
-				System.exit(1);
-			}
-			
-			duplicateData = false;
-			if(moreToWrite) {
-				log.log(LogLevel.INFO,"Waiting for Next DATA Block:");
-			}
-		}
-		
-		log.log(LogLevel.INFO,"File transfer complete!");
-		
-		try {
-			fos.flush();
-			fos.close();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		
-	}
-	
-	
-	/**
-	 * Method to write a file to the server.  The Client must already have the server
-	 * address and port #.  This has been replaced with TFTPTransaction methods and is
-	 * not being used for transfers.
-	 * 
-	 * @param filename Filepath to the client-side file that will be read from
-	 */
-	public void write(String filename)
-	{
-		
-		//Tries to open the file.  If the filename is invalid, cancels the request.
-		FileInputStream fis = null;
-		try {
-			fis = new FileInputStream(filename);
-		} catch (FileNotFoundException e) {
-			log.log(LogLevel.WARN, "Invalid file name: file not found.  Please re-enter command with a valid file name");
-			return;
-		} 
-		log.log(LogLevel.INFO,"Successfully opened: "+filename);
-    	
-    	long timeout = 0;
-		TFTPPacket.DATA dataPacket;
-	    DatagramPacket receivePacket;
-	    DatagramPacket sendPacket = null;
-	    byte[] data = new byte[TFTPPacket.MAX_SIZE];
-	    int len = 69999;
-		int blockNum = 0;
-	    
-		//Receiving the first ACK packet and stripping the new port number
-	    receivePacket = new DatagramPacket(data, data.length);
-	    try {
-	    	sendReceiveSocket.receive(receivePacket);
-	    } catch(IOException e1) {
-	    	if(e1 instanceof SocketTimeoutException) {
-	    		log.log(LogLevel.ERROR,  "Socket timeout while waiting for first ACK packet.  Returning to console.");
-	    		try {
-	    			fis.close();
-	    		} catch(IOException e2) {
-	    			e2.printStackTrace();
-	    			System.exit(1);
-	    		}
-	    		return;
-	    	} else {
-	    	e1.printStackTrace();
-	    	System.exit(1);
-	    	}
-	    }
-	    
-		log.log(LogLevel.INFO,"Recieved packet from server.");
-	    
-	    // Parse ACK for correctness
-	    TFTPPacket.ACK ackPacket = null;
-    	try {
-			ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
-		} catch (IllegalArgumentException e) {
-			log.log(LogLevel.FATAL,"Not an ACK Packet! :((((");
-			e.printStackTrace();
-			System.exit(0);
-		}
-    	
-    	log.logPacket(LogLevel.INFO, receivePacket, ackPacket, true, "server");
-    	
-    	if (ackPacket.getBlockNum() == 0 ) {
-			// Correct acks
-			log.log(LogLevel.INFO,"Recieved ACK for block #0.  Starting data transfer...");
-		} else {
-			// Incorrect ack
-			log.log(LogLevel.FATAL,"Wrong ACK response. Incorrect block number.");
-			try {
-    			fis.close();
-    		} catch (IOException e) {
-    			// TODO Auto-generated catch block
-    			e.printStackTrace();
-    		}
-    		throw new IllegalArgumentException();
-		}
-    	
-		int replyPort = receivePacket.getPort();
-		boolean moreToRead = true;
-		boolean duplicateAck = false;
-		while (moreToRead) {
-			// Read data from file into data packet and send to server if the last ACK was correct
-		    if(!duplicateAck) {
-		    	blockNum++;
-		    	blockNum = blockNum & 0xFFFF;
-		    	try {
-		    		if ((len=fis.read(data,0,512)) < 512) {
-		    			moreToRead = false;
-		    			if (len == -1) {
-		    				// End of file reached exactly. Send 0 bytes of data.
-		    				len = 0;
-		    			}
-		    			fis.close();
-		    		}
-		    		// Shrink wrap size based on the # of bytes read from the file
-		    		data = Arrays.copyOf(data, len);
-		    	} catch (IOException e) {
-		    		e.printStackTrace();
-		    		System.exit(0);
-		    	}
-		    	
-		    	// Assemble data packet
-		    	dataPacket = new TFTPPacket.DATA(blockNum, data);
-		    	sendPacket = new DatagramPacket(dataPacket.toBytes(), dataPacket.toBytes().length, serverAddress, replyPort);
-		    	
-		    	log.logPacket(LogLevel.INFO, sendPacket, dataPacket, false, "server");
-		    	
-		    	try {
-		    		sendReceiveSocket.send(sendPacket);
-		    		sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_DATA_TIMEOUT);
-		    	} catch (IOException e) {
-		    		e.printStackTrace();
-		    		System.exit(1);
-		    	}
-		    	
-		    	timeout = System.currentTimeMillis() + TFTPPacket.TFTP_DATA_TIMEOUT;
-		    	duplicateAck = false;
-		    }
-		    
-		    // Wait for ACK
-			log.log(LogLevel.INFO,"Waiting for ACK packet...");
-		    
-		    // New Receive total bytes
-		    data = new byte[TFTPPacket.MAX_SIZE];
-		    receivePacket = new DatagramPacket(data, data.length);
-		    boolean acknowledged = false;
-		    int resendCount = 0;
-		    // Loop to handle socket timeouts.  If the socket times out, the last data packet is sent again.
-		    // Loops 5 times until the program gives up and stops the transfer.
-		    while(!acknowledged) {
-		    	try {
-		    		sendReceiveSocket.receive(receivePacket);
-		    		acknowledged = true;
-		    	} catch(IOException e1) {
-		    		if(e1 instanceof SocketTimeoutException) {
-		    			log.log(LogLevel.FATAL,"Socket timeout while waiting for ACK packet.");
-		    			if(resendCount > 4) {
-				    		log.log(LogLevel.FATAL,"Data has been re-sent 5 times.  Aborting file transfer.");
-				    		return;
-				    	}
-		    			log.log(LogLevel.INFO,"Re-sending last DATA packet.");
-		    			
-		    			log.logPacket(LogLevel.INFO, sendPacket, ackPacket, false, "server");
-		    			try {
-				    		sendReceiveSocket.send(sendPacket);
-				    		sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_DATA_TIMEOUT);
-				    	} catch (IOException e2) {
-				    		e2.printStackTrace();
-				    		System.exit(1);
-				    	}
-		    			timeout = System.currentTimeMillis() + TFTPPacket.TFTP_DATA_TIMEOUT;
-		    			resendCount++;
-		    		} else {
-		    		e1.printStackTrace();
-		    		System.exit(1);
-		    		}
-		    	}
-		    }
-		    
-		    // Parse ACK for correctness
-		    ackPacket = null;
-	    	try {
-				ackPacket = new TFTPPacket.ACK(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
-				replyPort = receivePacket.getPort();
-			} catch (IllegalArgumentException e) {
-				log.log(LogLevel.FATAL,"Wrong Packet Recieved. Reason: Not an ackPacket");
-				e.printStackTrace();
-				System.exit(0);
-			}
-	    	log.logPacket(LogLevel.INFO, receivePacket, ackPacket, true, "server");
-	    	if (ackPacket.getBlockNum() == blockNum ) {
-				// Correct ack
-	    		duplicateAck = false;
-			} else if(ackPacket.getBlockNum() < blockNum) {
-				// Duplicate ack
-				log.log(LogLevel.FATAL,"Wrong ACK response. Reason: Incorrect block number.  Ignoring ACK and waiting for another packet.");
-				int timeLeft = (int)(timeout - System.currentTimeMillis());
-				if(timeLeft > 0) {
-					try {
-						sendReceiveSocket.setSoTimeout(timeLeft);
-					} catch(SocketException se) {
-						se.printStackTrace();
-						System.exit(1);
-					}
-				} else {
-					try {
-						sendReceiveSocket.setSoTimeout(10);
-					} catch(SocketException se) {
-						se.printStackTrace();
-						System.exit(1);
-					}
-				}
-				duplicateAck = true;
-			} else {
-				log.log(LogLevel.FATAL,"Error: Block number higher than current block number.  Aborting transfer.");
-				System.exit(1);
-			}
-	    	
-			log.log(LogLevel.INFO,"Received Packet:"
-				+"Packet Type: ACK"
-				+"Block Number: "+blockNum);
-		}
-		// All data is sent and last ACK received,
-		// Close socket, quit
-		log.log(LogLevel.INFO,"File transfer complete!");
-	}
 	
 	/**
 	 * Checks the specified filepaths (source and dest) to see which one is on the server.
@@ -461,8 +77,8 @@ public class Client {
 			try {
 				this.serverAddress = InetAddress.getByName(addressString);
 			} catch(UnknownHostException e) {
-				e.printStackTrace();
-				System.exit(1);
+				c.printerr(String.format("Unkown host \"%s\"", source));
+				return;
 			}
 			
 			String args[] = {"getCmd", filepath, dest};
@@ -476,8 +92,8 @@ public class Client {
 			try {
 				this.serverAddress = InetAddress.getByName(addressString);
 			} catch(UnknownHostException e) {
-				e.printStackTrace();
-				System.exit(1);
+				c.printerr(String.format("Unkown host \"%s\"", source));
+				return;
 			}
 			
 			// Calls putCmd with the arguments determined from above
@@ -493,9 +109,6 @@ public class Client {
 	}
 	
 	private void shutdown (Console c, String[] args) {
-		c.println("Closing socket and scanner, and shutting down server.");
-		
-		sendReceiveSocket.close();
 		try {
 			c.close();
 		} catch (IOException e) {
@@ -556,25 +169,34 @@ public class Client {
 			remoteFile = args[2];
 		}
 		
-		// Do write request
-		TFTPPacket.WRQ writePacket = new TFTPPacket.WRQ(remoteFile, TFTPPacket.TFTPMode.NETASCII);
-		DatagramPacket request = new DatagramPacket(writePacket.toBytes(), writePacket.size(), serverAddress, serverPort);
-		
-		log.logPacket(LogLevel.INFO, request, writePacket, false, "server");
-		
+		// Create socket for request
+		DatagramSocket sendReceiveSocket = null;
 		try {
-			sendReceiveSocket.send(request);
-		} catch(IOException e) {
-			e.printStackTrace();
-			System.exit(1);
+			sendReceiveSocket = new DatagramSocket();
+			sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
+		} catch(SocketException se) {
+			c.printerr("Could not create socket for transaction");
+			return;
 		}
-		
     	
 		try (TFTPTransaction transaction = 
 				new TFTPTransaction.TFTPSendTransaction(sendReceiveSocket,
 						serverAddress, serverPort, args[1], true,
 						Client.log);) {
+			// Do write request
+			TFTPPacket.WRQ writePacket = new TFTPPacket.WRQ(remoteFile,
+					TFTPPacket.TFTPMode.NETASCII);
+			DatagramPacket request = new DatagramPacket(writePacket.toBytes(),
+					writePacket.size(), serverAddress, serverPort);
 			
+			log.logPacket(LogLevel.INFO, request, writePacket, false, "server");
+			
+			try {
+				sendReceiveSocket.send(request);
+			} catch(IOException e) {
+				c.printerr("Failed to send request to server.");
+				return;
+			}
 			
 			transaction.run();
 			
@@ -632,6 +254,8 @@ public class Client {
 		} catch (IOException e1) {
 			c.println("Failed to close file after transaction completed.");
 		}
+		
+		sendReceiveSocket.close();
 	}
 	
 	private void getCmd (Console c, String[] args) {
@@ -660,23 +284,35 @@ public class Client {
 			localFile = args[2];
 		}
 		
-		// Do read Request
-		TFTPPacket.RRQ readPacket = new TFTPPacket.RRQ(args[1], TFTPPacket.TFTPMode.NETASCII);
-		DatagramPacket request = new DatagramPacket(readPacket.toBytes(), readPacket.size(), serverAddress, serverPort);
-		
-		log.logPacket(LogLevel.INFO, request, readPacket, false, "server");
-		
+		// Create socket for request
+		DatagramSocket sendReceiveSocket = null;
 		try {
-			sendReceiveSocket.send(request);
-		} catch(IOException e) {
-			e.printStackTrace();
-			System.exit(1);
+			sendReceiveSocket = new DatagramSocket();
+			sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
+		} catch(SocketException se) {
+			c.printerr("Could not create socket for transaction");
+			return;
 		}
 
 		try (TFTPTransaction transaction =
 				new TFTPTransaction.TFTPReceiveTransaction(
 						sendReceiveSocket, serverAddress, serverPort,
 						localFile, false, true, Client.log);) {
+			// Do read Request
+			TFTPPacket.RRQ readPacket = new TFTPPacket.RRQ(args[1],
+					TFTPPacket.TFTPMode.NETASCII);
+			DatagramPacket request = new DatagramPacket(readPacket.toBytes(),
+					readPacket.size(), serverAddress, serverPort);
+			
+			log.logPacket(LogLevel.INFO, request, readPacket, false, "server");
+			
+			try {
+				sendReceiveSocket.send(request);
+			} catch(IOException e) {
+				c.printerr("Failed to send request to server.");
+				return;
+			}
+			
 			transaction.run();
 
 			// Print success message if transfer is complete or error message if
@@ -730,6 +366,8 @@ public class Client {
 		} catch (IOException e1) {
 			c.println("Failed to close file after transaction completed.");
 		}
+		
+		sendReceiveSocket.close();
 	}
 
 	private void connectCmd (Console c, String[] args) {
