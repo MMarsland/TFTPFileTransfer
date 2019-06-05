@@ -277,10 +277,10 @@ class ServerListener implements Runnable {
 		    	} 
 			} catch (IllegalArgumentException e) {
 				// Unknown Packet Type... (Incorrect OP Code)
-	    		logger.log(LogLevel.ERROR, "Error: Unknown Packet Type. Reason: Not a TFTP OPCode Solution: Send Error Packet in return and continue.");
+	    		logger.log(LogLevel.ERROR, "Error: Unknown Packet Type. Reason: Not a valid TFTP Packet. Solution: Send Error Packet in return and continue.");
 	    		try { 
 	    			DatagramSocket sendSocket = new DatagramSocket();
-	    			TFTPPacket.ERROR errorPacket = new TFTPPacket.ERROR(TFTPPacket.TFTPError.ILLEGAL_OPERATION, "The first request received by server must be a Read or Write Request. (OPCode: 01 or 02)");
+	    			TFTPPacket.ERROR errorPacket = new TFTPPacket.ERROR(TFTPPacket.TFTPError.ILLEGAL_OPERATION, "The first request received by server must be a valid Read or Write Request. (OPCode: 01 or 02)");
 	    			DatagramPacket sendPacket = new DatagramPacket(errorPacket.toBytes(), errorPacket.size(), receivePacket.getAddress(), receivePacket.getPort());
 	    			sendSocket.send(sendPacket);
 	    			sendSocket.close();
