@@ -325,6 +325,21 @@ abstract class RequestHandler implements Runnable {
 	protected Logger logger;
 	
 	public abstract void run();
+	public void sendErrorPacket(TFTPPacket.TFTPError error, String description) {
+		try { 
+			DatagramSocket sendSocket = new DatagramSocket();
+			TFTPPacket.ERROR errorPacket = new TFTPPacket.ERROR(error, description);
+			DatagramPacket sendPacket = new DatagramPacket(errorPacket.toBytes(), errorPacket.size(), clientAddress, clientTID);
+			sendSocket.send(sendPacket);
+			sendSocket.close();
+		} catch (SocketException se) { // Can't create the socket.
+			se.printStackTrace();
+			logger.log(LogLevel.ERROR, "Error: SocketException. Reason: Could not create socket. Solution: Ending this transaction.");
+	    } catch (IOException ioe) { // Can't send the packet.
+	    	ioe.printStackTrace();
+	    	logger.log(LogLevel.ERROR, "Error: Socket IO Error. Reason: Could not send packet. Solution: Ending this transaction.");
+	    }
+	}
 }
 
 
@@ -376,7 +391,7 @@ class ReadHandler extends RequestHandler implements Runnable {
 						clientAddress, clientTID, filename, false, logger)) {
 			
 			transaction.run();
-			
+
 			// Print success message if transfer is complete or error message if transfer has failed.
 			switch (transaction.getState()) {
 			case COMPLETE:
@@ -391,26 +406,26 @@ class ReadHandler extends RequestHandler implements Runnable {
 				System.exit(1);
 				break;
 			case LAST_BLOCK_ACK_TIMEOUT:
-				logger.log(LogLevel.FATAL, "File transfer may have failed. Timed out waiting for client to acknowledge last block.");
+				logger.log(LogLevel.ERROR, "File transfer may have failed. Timed out waiting for client to acknowledge last block.");
 				break;
 			case PEER_BAD_PACKET:
-				logger.log(LogLevel.FATAL, "File transfer failed. Client received a bad packet. Error packet response received.");
+				logger.log(LogLevel.ERROR, "File transfer failed. Client received a bad packet. Error packet response received.");
 				break;
 			case PEER_DISK_FULL:
 				logger.log(LogLevel.FATAL, "File transfer failed. Client disk full.");
 				System.exit(1);
 				break;
 			case PEER_ERROR:
-				logger.log(LogLevel.FATAL, "File transfer failed. Error Packet Received from client.");
+				logger.log(LogLevel.ERROR, "File transfer failed. Error Packet Received from client.");
 				break;
 			case RECEIVED_BAD_PACKET:
-				logger.log(LogLevel.FATAL, "File transfer failed. Received a bad packet. Error packet sent in response.");
+				logger.log(LogLevel.ERROR, "File transfer failed. Received a bad packet. Error packet sent in response.");
 				break;
 			case SOCKET_IO_ERROR:
-				logger.log(LogLevel.FATAL, "File transfer failed. Socket IO error.");
+				logger.log(LogLevel.ERROR, "File transfer failed. Socket IO error.");
 				break;
 			case TIMEOUT:
-				logger.log(LogLevel.FATAL, "File transfer failed. Timed out waiting for client.");
+				logger.log(LogLevel.ERROR, "File transfer failed. Timed out waiting for client.");
 				break;
 			default:
 				logger.log(LogLevel.FATAL, String.format(
@@ -423,19 +438,7 @@ class ReadHandler extends RequestHandler implements Runnable {
 		} catch (FileNotFoundException e) {
 			logger.log(LogLevel.ERROR, String.format("File not found on Server: \"%s\".", filename));
 			// Send Error Packet to client
-    		try { 
-    			DatagramSocket sendSocket = new DatagramSocket();
-    			TFTPPacket.ERROR errorPacket = new TFTPPacket.ERROR(TFTPPacket.TFTPError.FILE_NOT_FOUND, "The file \""+filename+"\" could not be found on the Server.");
-    			DatagramPacket sendPacket = new DatagramPacket(errorPacket.toBytes(), errorPacket.size(), receivePacket.getAddress(), receivePacket.getPort());
-    			sendSocket.send(sendPacket);
-    			sendSocket.close();
-    		} catch (SocketException se) { // Can't create the socket.
-    			se.printStackTrace();
-    			logger.log(LogLevel.ERROR, "Error: SocketException. Reason: Could not create socket. Solution: Ending this transaction.");
-    	    } catch (IOException ioe) { // Can't send the packet.
-    	    	ioe.printStackTrace();
-    	    	logger.log(LogLevel.ERROR, "Error: Socket IO Error. Reason: Could not send packet. Solution: Ending this transaction.");
-    	    }
+			sendErrorPacket(TFTPPacket.TFTPError.FILE_NOT_FOUND, "The file \""+filename+"\" could not be found on the Server.");
 		} catch (IOException e) {
 			logger.log(LogLevel.ERROR, "Error: File Closure. Reason: Failed to close file when terminating transaction. Solution: Ending Transaction without closing file.");
 		}
