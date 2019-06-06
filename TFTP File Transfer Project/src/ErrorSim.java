@@ -19,6 +19,7 @@ import org.apache.commons.cli.*;
  */
 class Errors {
 	private LinkedList<ErrorInstruction> errors = new LinkedList<ErrorInstruction>();
+	private LinkedList<ErrorInstruction> errorsBackup = new LinkedList<ErrorInstruction>();
 	
 	/**
 	 * Adds a new ErrorInstruction to the error simulators already pending errors
@@ -139,6 +140,29 @@ class Errors {
 			}
 		}
 		return null;
+	}
+	
+	/**
+	 * Creates a backup copy of the error list that can be restored at a later time
+	 */
+	@SuppressWarnings("unchecked")
+	public synchronized void backupErrors() {
+		errorsBackup.clear();
+		int i;
+		for(i=0; i<errors.size(); i++) {
+			errorsBackup.add(errors.get(i).clone());
+		}
+	}
+	
+	/**
+	 * Restores the backup error list
+	 */
+	public synchronized void restoreErrors() {
+		errors.clear();
+		int i;
+		for(i=0; i<errorsBackup.size(); i++) {
+			errors.add(errorsBackup.get(i).clone());
+		}
 	}
 	
 	/**
@@ -326,6 +350,13 @@ class ErrorInstruction {
 			desc += "Perform " + timesToPerform + " time(s), " + (timesToPerform - occurances) + " remaining.";
 		}
 		return desc;
+	}
+	
+	public ErrorInstruction clone() {
+		ErrorInstruction ei = new ErrorInstruction(this.packetType, this.errorType, this.packetNumber, this.param1, this.timesToPerform);
+		ei.occurances = this.occurances;
+		ei.skipped = this.skipped;
+		return ei;
 	}
 	
 	/**
@@ -657,6 +688,7 @@ class ErrorSimClientListener{
     	    if(TFTPpacket instanceof TFTPPacket.WRQ || TFTPpacket instanceof TFTPPacket.RRQ) {
     	    	errorSim.clientListener.cancelDelayedSend();
     	    	errorSim.serverListener.cancelDelayedSend();
+    	    	errorSim.errors.backupErrors();
     	    }
     	}
     	catch(IllegalArgumentException e) {
@@ -1679,6 +1711,9 @@ public class ErrorSim {
 	private void recallCmd (Console c, String[] args) {
 		if(args.length > 1) {
 			c.println("Error: Too many parameters.");
+		}
+		else {
+			errors.restoreErrors();
 		}
 	}
 	
