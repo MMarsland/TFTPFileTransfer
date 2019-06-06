@@ -48,6 +48,18 @@ class Errors {
 	}
 	
 	/**
+	 * Removes an error from the pending errors
+	 * @param error the error number to remove
+	 * @return true if the error was removed, false if it was not found
+	 */
+	public synchronized boolean remove(int errornum) {
+		if(errornum <= errors.size() && errornum >= 0) {
+			return errors.remove(errornum-1) != null;
+		}
+		return false;
+	}
+	
+	/**
 	 * Checks a packet to see if any of the pending errors are applicable to it
 	 * @param packet the packet to check
 	 * @return null if no errors apply to the packet, or the ErrorInstruction that does
@@ -582,8 +594,23 @@ class ErrorSimClientListener{
 	 */
 	public void close()
 	{
-		knownSocket.close();
+	    cancelDelayedSend();
+	    knownSocket.close();
 	    TIDSocket.close();
+	}
+	
+	/**
+	 * Cancels the sending of all delayed packets
+	 */
+	public void cancelDelayedSend() {
+		synchronized(sendTimer) {
+			sendTimer.cancel(); //Remove all scheduled tasks
+			sendTimer = new Timer(); //Restart the timer
+		}
+		synchronized(invalidTIDSendTimer) {
+			invalidTIDSendTimer.cancel(); //Remove all scheduled tasks
+			invalidTIDSendTimer = new Timer(); //Restart the timer
+		}
 	}
 	
 	/**
@@ -611,6 +638,7 @@ class ErrorSimClientListener{
 
 		byte data[] = new byte[TFTPPacket.MAX_SIZE];
 	    DatagramPacket packet = new DatagramPacket(data, data.length);
+	    TFTPPacket TFTPpacket;
 	    
     	try { //Wait for a packet to come in from the client.
     		socket.receive(packet);
@@ -620,6 +648,19 @@ class ErrorSimClientListener{
     		}
     		e.printStackTrace();
 			System.exit(1);
+    	}
+    	
+    	try {
+    	    TFTPpacket = TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength()));
+    	    
+    	    //Check if this is the start of a new transaction. If it is, cancel all the pending delayed packets
+    	    if(TFTPpacket instanceof TFTPPacket.WRQ || TFTPpacket instanceof TFTPPacket.RRQ) {
+    	    	errorSim.clientListener.cancelDelayedSend();
+    	    	errorSim.serverListener.cancelDelayedSend();
+    	    }
+    	}
+    	catch(IllegalArgumentException e) {
+    	
     	}
     	
     	if(verbose) {
@@ -906,9 +947,24 @@ class ErrorSimServerListener implements Runnable {
 	 */
 	public void close()
 	{
+		cancelDelayedSend();
 		socket.close();
 	}
 
+	/**
+	 * Cancels the sending of all delayed packets
+	 */
+	public void cancelDelayedSend() {
+		synchronized(sendTimer) {
+			sendTimer.cancel(); //Remove all scheduled tasks
+			sendTimer = new Timer(); //Restart the timer
+		}
+		synchronized(invalidTIDSendTimer) {
+			invalidTIDSendTimer.cancel(); //Remove all scheduled tasks
+			invalidTIDSendTimer = new Timer(); //Restart the timer
+		}
+	}
+	
 	/**
 	 * The overridden run method for this thread
 	 */
@@ -1586,7 +1642,55 @@ public class ErrorSim {
 		
 	//Handles the errors command
 	private void errorsCmd (Console c, String[] args) {
-		c.println(errors.toString());
+		if(args.length > 1) {
+			c.println("Error: Too many parameters.");
+		}
+		else {
+			c.println(errors.toString());
+		}
+	}
+	
+	//Handles the remove command
+	private void removeCmd (Console c, String[] args) {
+		if(args.length > 2) {
+			c.println("Error: Too many parameters.");
+		}
+		else if(args.length < 2){
+			c.println("Error: Not enough parameters.");
+		}
+		else {
+			int errornum = Integer.parseInt(args[1]);
+		
+			if(errornum < 1) {
+				c.println("Error: Invalid argument.");
+			}
+			else {
+				if(errors.remove(errornum)) {
+					c.println("Error " + errornum + " removed.");
+				}
+				else {
+					c.println("Could not remove error " + errornum + ".");
+				}
+			}
+		}
+	}
+	
+	//Handles the recall command
+	private void recallCmd (Console c, String[] args) {
+		if(args.length > 1) {
+			c.println("Error: Too many parameters.");
+		}
+	}
+	
+	//Handles the reset command
+	private void resetCmd (Console c, String[] args) {
+		if(args.length > 1) {
+			c.println("Error: Too many parameters.");
+		}
+		else {
+			clientListener.cancelDelayedSend();
+			serverListener.cancelDelayedSend();
+		}
 	}
 	
 	//Handles the help command
@@ -1607,6 +1711,14 @@ public class ErrorSim {
 		c.println("");
 		c.println("serverip[x] - Outputs the IP address for the server.");
 		c.println("              If parameter X is provided, then the address is changed to X.");
+		c.println("");
+		c.println("errors - Shows a list of all pending errors.");
+		c.println("");
+		c.println("rm[x] - Removes pending error [x].");
+		c.println("");
+		c.println("recall - Restores the errorlist to its state before the last TFTP transaction.");
+		c.println("");
+		c.println("reset - Cancels the sending of all delayed packets.");
 		c.println("");
 		c.println("drop[packet type][packet number][# of times] - drops a packet.");
 		c.println("    [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
@@ -1782,6 +1894,9 @@ public class ErrorSim {
 				Map.entry("blocknum", errorSim::invdBlocknumCmd),
 				Map.entry("errornum", errorSim::invdErrornumCmd),
 				Map.entry("errors", errorSim::errorsCmd),
+				Map.entry("rm", errorSim::removeCmd),
+				Map.entry("recall", errorSim::recallCmd),
+				Map.entry("reset", errorSim::resetCmd),
 				Map.entry("help", errorSim::helpCmd)
 				);
 		
