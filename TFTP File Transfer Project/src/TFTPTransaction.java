@@ -23,9 +23,9 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 	public enum TFTPTransactionState {
 		INITIALIZED, IN_PROGRESS, BLOCK_ZERO_TIMEOUT, TIMEOUT,
 		LAST_BLOCK_ACK_TIMEOUT, FILE_TOO_LARGE, FILE_IO_ERROR, SOCKET_IO_ERROR,
-		RECEIVED_BAD_PACKET, PEER_BAD_PACKET, PEER_FILE_NOT_FOUND,
-		PEER_ACCESS_VIOLATION, PEER_DISK_FULL, PEER_FILE_EXISTS, PEER_ERROR,
-		COMPLETE
+		RECEIVED_INVALID_OPCODE, RECEIVED_BAD_PACKET, PEER_BAD_PACKET,
+		PEER_FILE_NOT_FOUND, PEER_ACCESS_VIOLATION, PEER_DISK_FULL,
+		PEER_FILE_EXISTS, PEER_ERROR, COMPLETE
 	}
 	
 	/**
@@ -45,6 +45,11 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 	 * The current state of the transaction
 	 */
 	private TFTPTransactionState state;
+	
+	/**
+	 * Message from error which occurred on peer
+	 */
+	private String errorMessage = null;
 	
 	/**
 	 * Logger used to log details of send and received packets
@@ -84,7 +89,8 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 				
 			this.socket.send(outgoing);
 			
-			this.logger.logPacket(LogLevel.INFO, outgoing, packet, false, "peer");
+			this.logger.logPacket(LogLevel.INFO, outgoing, packet, false,
+					"peer");
 		}
 	}
 	
@@ -208,6 +214,7 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 			this.state = TFTPTransactionState.PEER_ERROR;
 			break;
 		}
+		this.errorMessage = error.getDescription();
 		return;
 	}
 	
@@ -219,6 +226,16 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 	public TFTPTransactionState getState ()
 	{
 		return this.state;
+	}
+	
+	/**
+	 * Get the message from a received error packet.
+	 * 
+	 * @return The error message or null if no error has been received
+	 */
+	public String getErrorMessage ()
+	{
+		return this.errorMessage;
 	}
 	
 	/**
@@ -405,8 +422,14 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 									TFTPPacket.TFTPError.ILLEGAL_OPERATION,
 									String.format("Not a valid packet. " + 
 										"Expected ACK %d.", i));
-							super.state =
+							if (e.getMessage().equalsIgnoreCase(
+									"Unkown Opcode")) {
+								super.state =
+								   TFTPTransactionState.RECEIVED_INVALID_OPCODE;
+							} else {
+								super.state =
 									TFTPTransactionState.RECEIVED_BAD_PACKET;
+							}
 							return;
 						} catch (IOException e) {
 							super.state = TFTPTransactionState.SOCKET_IO_ERROR;
@@ -601,8 +624,14 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 									TFTPPacket.TFTPError.ILLEGAL_OPERATION,
 									String.format("Not a valid packet. " +
 									"Expected DATA %d.", blockNum));
-							super.state =
+							if (e.getMessage().equalsIgnoreCase(
+									"Unkown Opcode")) {
+								super.state =
+								   TFTPTransactionState.RECEIVED_INVALID_OPCODE;
+							} else {
+								super.state =
 									TFTPTransactionState.RECEIVED_BAD_PACKET;
+							}
 							return;
 						} catch (IOException e) {
 							super.state = TFTPTransactionState.SOCKET_IO_ERROR;
@@ -621,7 +650,15 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 							} catch (IOException e) {
 								super.state =
 										TFTPTransactionState.FILE_IO_ERROR;
-								e.printStackTrace();
+								
+								if (e.getMessage().equalsIgnoreCase(
+										"no space left on device")) {
+									super.sendErrorPacket(
+											TFTPPacket.TFTPError.DISK_FULL,
+											"Disk full");
+								}
+								
+								return;
 							}
 							// Send ACK
 							retransmitTime = System.currentTimeMillis() +
