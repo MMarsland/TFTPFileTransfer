@@ -716,7 +716,6 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 							} catch (IOException e) {
 								super.state =
 										TFTPTransactionState.SOCKET_IO_ERROR;
-								e.printStackTrace();
 								return;
 							}
 						} else if (tftpData.getBlockNum() > blockNum) {
