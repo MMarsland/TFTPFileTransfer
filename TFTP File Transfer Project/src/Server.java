@@ -567,7 +567,7 @@ class WriteHandler extends RequestHandler implements Runnable {
 		    } else {
 		    	// The file does not exist or is already a directory!
 		    	logger.log(LogLevel.ERROR, String.format("The file \""+filename+"\" could not be written. May already be a directory."));
-		    	sendErrorPacket(TFTPPacket.TFTPError.FILE_NOT_FOUND, "The file \""+filename+"\" could not be written. May already be a directory.");
+		    	sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be written. May already be a directory.");
 		    }
 		} catch (IOException e) {
 			logger.log(LogLevel.ERROR, "Error: File Closure. Reason: Failed to close file when terminating transaction. Solution: Ending Transaction without closing file.");
