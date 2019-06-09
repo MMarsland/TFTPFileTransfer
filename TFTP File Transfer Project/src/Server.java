@@ -2,6 +2,7 @@
  * The Server for the TFTP client-server project
  */
 
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -397,7 +398,7 @@ class ReadHandler extends RequestHandler implements Runnable {
 				break;
 			case FILE_IO_ERROR:
 				logger.log(LogLevel.FATAL, "File transfer failed. File IO error.");
-				// TODO
+				// TODO - Send an Error Packet here? Or just die?... (file.read - No Action; file.write - send disk_full error and come here; file.getChannel().size() - No Action)
 				break;
 			case FILE_TOO_LARGE:
 				logger.log(LogLevel.FATAL, "File transfer failed. File too large.");
@@ -433,10 +434,25 @@ class ReadHandler extends RequestHandler implements Runnable {
 				break;
 				
 			}
-		} catch (FileNotFoundException e) {
-			logger.log(LogLevel.ERROR, String.format("File not found on Server: \"%s\".", filename));
-			// Send Error Packet to client
-			sendErrorPacket(TFTPPacket.TFTPError.FILE_NOT_FOUND, "The file \""+filename+"\" could not be found on the Server.");
+		} catch (FileNotFoundException e) {			
+			// if the file does not exist,is a directory rather than a regular file,or for some other reason cannot be opened for reading.
+		
+		    File fileToTest = new File(filename);
+		    if (fileToTest.exists() && fileToTest.isFile())
+		    {
+		        // The file exists and is a file.. Must be an access violation (or some other error)
+		    	if(!fileToTest.canRead()) {
+		    		logger.log(LogLevel.ERROR, String.format("The file: "+filename+" could not be opened for reading."));
+		    		sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be opened for reading.");
+		    	} else {
+		    		// TODO - Some other error. (Do the same thing we do as an IO Error?
+		    		logger.log(LogLevel.ERROR, String.format("File IOError trying to open the file for reading."));
+		    	}
+		    } else {
+		    	// The file does not exist or is already a directory!
+		    	logger.log(LogLevel.ERROR, String.format("File not found on Server: \"%s\".", filename));
+		    	sendErrorPacket(TFTPPacket.TFTPError.FILE_NOT_FOUND, "The file \""+filename+"\" could not be found on the Server. (May be a directory)");
+		    }
 		} catch (IOException e) {
 			logger.log(LogLevel.ERROR, "Error: File Closure. Reason: Failed to close file when terminating transaction. Solution: Ending Transaction without closing file.");
 		}
@@ -528,9 +544,31 @@ class WriteHandler extends RequestHandler implements Runnable {
 					break;
 			}
 		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-			logger.log(LogLevel.FATAL, String.format("File not found: \"%s\".", filename));
-			// TODO - Send an error saying that the file could not be written?? WHY?? (Access Violation?)
+			// if the file does not exist,is a directory rather than a regular file,or for some other reason cannot be opened for writing.
+			
+		    File fileToTest = new File(filename);
+		    if (fileToTest.exists() && fileToTest.isFile())
+		    {
+		        // The file exists and is a file.. Must be an access violation (or some other error)
+		    	if(!fileToTest.canWrite()) {
+		    		if(fileToTest.canRead()) {
+		    			// Read-Only
+		    			logger.log(LogLevel.ERROR, String.format("The file: "+filename+" could not be opened for writing because it is read-only."));
+			    		sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be opened for writing because it is read-only.");
+		    		} else {
+		    			// Some other reason it can't be written
+		    			logger.log(LogLevel.ERROR, String.format("The file: "+filename+" could not be opened for writing."));
+			    		sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be opened for writing.");
+		    		}
+		    	} else {
+		    		// TODO - Some other error. (Do the same thing we do as an IO Error?)
+		    		logger.log(LogLevel.ERROR, String.format("File IOError trying to open the file for writing."));
+		    	}
+		    } else {
+		    	// The file does not exist or is already a directory!
+		    	logger.log(LogLevel.ERROR, String.format("The file \""+filename+"\" could not be written. May already be a directory."));
+		    	sendErrorPacket(TFTPPacket.TFTPError.FILE_NOT_FOUND, "The file \""+filename+"\" could not be written. May already be a directory.");
+		    }
 		} catch (IOException e) {
 			logger.log(LogLevel.ERROR, "Error: File Closure. Reason: Failed to close file when terminating transaction. Solution: Ending Transaction without closing file.");
 		}
