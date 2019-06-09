@@ -43,9 +43,9 @@ public class Client {
 	{
 		this.serverPort = serverPort;
 		
-		log.setVerboseLevel(verboseLevel);
+		log.setVerboseLevel(verboseLevel, true);
 		
-		log.setLogFile(logFilePath);
+		log.setLogFile(logFilePath, true);
 		
 		log.log(LogLevel.INFO,"Setting up send/receive socket.");
 	}
@@ -116,13 +116,14 @@ public class Client {
 			System.exit(1);
 		}
 		
+		log.log(LogLevel.QUIET, "Shutting Down Client...");
 		log.endLog();
 		System.exit(0);
 	}
 	
 	private void setVerboseCmd (Console c, String[] args) {
 		c.println("Running in verbose mode.");
-		log.setVerboseLevel(LogLevel.INFO);
+		log.setVerboseLevel(LogLevel.INFO, false);
 	}
 	
 	private void setLogfileCmd (Console c, String[] args) {
@@ -135,12 +136,12 @@ public class Client {
 			c.println("Too many arguments.");
 			return;
 		}
-		log.setLogFile(args[1]);
+		log.setLogFile(args[1], false);
 	}
 
 	private void setQuietCmd (Console c, String[] args) {
 		c.println("Running in quiet mode.");
-		log.setVerboseLevel(LogLevel.WARN);
+		log.setVerboseLevel(LogLevel.WARN, false);
 	}
 	
 	private void putCmd (Console c, String[] args) {
@@ -422,10 +423,10 @@ public class Client {
 	}
 	
 	public static void main(String[] args) {
-		log.log(LogLevel.INFO,"Setting up Client...");
+		log.log(LogLevel.QUIET,"Starting Client...");
 		
 		int serverPort = 69;
-		LogLevel verboseLevel = LogLevel.WARN;
+		LogLevel verboseLevel = LogLevel.QUIET;
 		String logFilePath = "";
 		
 		//Setting up the parsing options

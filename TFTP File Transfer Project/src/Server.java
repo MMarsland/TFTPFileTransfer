@@ -30,8 +30,8 @@ public class Server {
 	
 	public Server(int serverPort, LogLevel verboseLevel, String logFilePath) {
 		
-		logger.setVerboseLevel(verboseLevel);
-		logger.setLogFile(logFilePath);
+		logger.setVerboseLevel(verboseLevel, true);
+		logger.setLogFile(logFilePath, true);
 		
 		this.listener = new ServerListener(serverPort, logger);
 		this.listenerThread = new Thread(listener);
@@ -47,6 +47,7 @@ public class Server {
 		}
 		else {
 			c.println("Shutting down Server...");
+			logger.endLog(0);
 			this.listener.close();
 			try {
 				c.close();
@@ -64,7 +65,7 @@ public class Server {
 		}
 		else {
 			c.println("Running in verbose mode.");
-			logger.setVerboseLevel(LogLevel.INFO);
+			logger.setVerboseLevel(LogLevel.INFO, false);
 		}
 	}
 	
@@ -74,7 +75,7 @@ public class Server {
 		}
 		else {
 			c.println("Running in quiet mode.");
-			logger.setVerboseLevel(LogLevel.QUIET);
+			logger.setVerboseLevel(LogLevel.QUIET, false);
 		}
 	}
 	
@@ -88,7 +89,7 @@ public class Server {
 			c.println("Too many arguments.");
 			return;
 		}
-		logger.setLogFile(args[1]);
+		logger.setLogFile(args[1], false);
 	}
 	
 	private void setServerPortCmd (Console c, String[] args) {
@@ -118,7 +119,7 @@ public class Server {
 		logger.log(LogLevel.QUIET, "Starting Server..."); 
 		
 		//Initialize settings to default values
-		LogLevel verboseLevel = LogLevel.FATAL;
+		LogLevel verboseLevel = LogLevel.QUIET;
 		int serverPort = 69;
 		String logFilePath = "";
 		
