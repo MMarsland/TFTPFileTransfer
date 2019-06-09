@@ -300,6 +300,9 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 					this.buffer = Arrays.copyOf(this.buffer, numBytes);
 				} catch (IOException e) {
 					// Could not read block from file
+					super.sendErrorPacket(
+							TFTPPacket.TFTPError.ERROR,
+							String.format("Failed to read data from file."));
 					super.state = TFTPTransactionState.FILE_IO_ERROR;
 					return true;
 				}
@@ -376,12 +379,18 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 								+ 1);
 			} catch (IOException e) {
 				// Didn't even manage to get the file size
+				super.sendErrorPacket(
+						TFTPPacket.TFTPError.ERROR,
+						String.format("Failed to obtain the size of the file."));
 				super.state = TFTPTransactionState.FILE_IO_ERROR;
 				return;
 			}
 			// Check that file can be sent over TFTP
 			if (numBlocks > TFTPPacket.MAX_BLOCK_NUM) {
 				// Too many blocks
+				super.sendErrorPacket(
+						TFTPPacket.TFTPError.ERROR,
+						String.format("File to large to be transfered."));
 				super.state = TFTPTransactionState.FILE_TOO_LARGE;
 				return;
 			}
@@ -656,6 +665,10 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 									super.sendErrorPacket(
 											TFTPPacket.TFTPError.DISK_FULL,
 											"Disk full");
+								} else {
+									super.sendErrorPacket(
+											TFTPPacket.TFTPError.ERROR,
+											String.format("Failed to write to the file."));
 								}
 								
 								return;
@@ -681,6 +694,9 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 								
 								if (blockNum == 0) {
 									// Block number has wrapped
+									super.sendErrorPacket(
+											TFTPPacket.TFTPError.ERROR,
+											String.format("Block number limit exceeded. File too large."));
 									super.state =
 											TFTPTransactionState.FILE_TOO_LARGE;
 									return;
@@ -700,7 +716,6 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 							} catch (IOException e) {
 								super.state =
 										TFTPTransactionState.SOCKET_IO_ERROR;
-								e.printStackTrace();
 								return;
 							}
 						} else if (tftpData.getBlockNum() > blockNum) {
