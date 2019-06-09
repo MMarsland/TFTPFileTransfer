@@ -104,7 +104,7 @@ public class Client {
 		}
 		
 		else {	//If neither file is on the server, print an warning message and returns.
-			log.log(LogLevel.WARN,"Neither file is on the server.  Please try another command.");
+			log.log(LogLevel.WARN,"Neither file is on the server.  Starting interactive mode.");
 		}
 		return;
 	}
@@ -148,7 +148,7 @@ public class Client {
 	private void putCmd (Console c, String[] args) {
 		if (args.length < 2) {
 			// Not enough arguments
-			c.println("Too few arguments.");
+			c.println("Error: Too few arguments.  Solution: returning to interactive mode.");
 			return;
 		} else if (args.length > 3) {
 			// Too many arguments
@@ -259,9 +259,9 @@ public class Client {
 				break;
 			}
 		} catch (FileNotFoundException e) {
-			c.println(String.format("Could not access file: \"%s\".", args[1]));
+			c.println(String.format("Error: Could not access file: \"%s\".  Returning to interactive mode.", args[1]));
 		} catch (IOException e1) {
-			c.println("Failed to close file after transaction completed.");
+			c.println("Error: Failed to close file after transaction completed.  Returning to interactive mode.");
 		}
 		
 		sendReceiveSocket.close();
@@ -306,7 +306,7 @@ public class Client {
 			sendReceiveSocket = new DatagramSocket();
 			sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
 		} catch(SocketException se) {
-			c.printerr("Could not create socket for transaction");
+			c.printerr("Error: Could not create socket for transaction.  Returning to interactive mode.");
 			return;
 		}
 
@@ -325,7 +325,7 @@ public class Client {
 			try {
 				sendReceiveSocket.send(request);
 			} catch(IOException e) {
-				c.printerr("Failed to send request to server.");
+				c.printerr("Error: Failed to send request to server.  Returning to interactive mode.");
 				return;
 			}
 			
@@ -378,10 +378,10 @@ public class Client {
 				break;
 			}
 		} catch (FileNotFoundException e) {
-			c.println(String.format("File could not be accessed: \"%s\".", args[1]));
+			c.println(String.format("Error: File could not be accessed: \"%s\".  Returning to interactive mode.", args[1]));
 			c.println("Aborting read request.");
 		} catch (IOException e1) {
-			c.println("Failed to close file after transaction completed.");
+			c.println("Error: Failed to close file after transaction completed.  Returning to interactive mode");
 		}
 		
 		sendReceiveSocket.close();
@@ -414,7 +414,7 @@ public class Client {
 				c.println("Connected to "+address+" on port 69");
 			}
 		} catch (UnknownHostException e) {
-			c.println("Invalid server: \"" + args[1] + "\"");
+			c.println("Error: Invalid server: \"" + args[1] + "\".  Returning to interactive mode");
 		}
 	}
 	
@@ -488,7 +488,7 @@ public class Client {
 	        	logFilePath = line.getOptionValue("l");
 	        }
 	    } catch( ParseException exp ) {
-	    	log.log(LogLevel.FATAL, "Command line argument parsing failed.  Reason: " + exp.getMessage() );
+	    	log.log(LogLevel.FATAL, "Fatal Error: Command line argument parsing failed.  Reason: " + exp.getMessage() );
 		    System.exit(1);
 	    }
 	    
@@ -517,14 +517,14 @@ public class Client {
 			try {
 				client.setServerAddress(InetAddress.getByName(positionalArgs[0]));
 			} catch (UnknownHostException e) {
-				log.log(LogLevel.WARN, "Invalid server: \"" + positionalArgs[0] + "\"");
+				log.log(LogLevel.QUIET, "Invalid server: \"" + positionalArgs[0] + "\"");
 			}
 		} else if (positionalArgs.length == 2) {
 			// Source and destination files specified
 			client.buildRequest(positionalArgs[0], positionalArgs[1], console);
 		} else if (positionalArgs.length > 2) {
 			// Too many arguments
-			log.log(LogLevel.WARN,"Too many files specified, entering interactive mode.");
+			log.log(LogLevel.QUIET,"Too many files specified, entering interactive mode.");
 		}
 
 		// Start console UI thread
