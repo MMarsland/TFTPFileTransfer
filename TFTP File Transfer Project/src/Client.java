@@ -383,18 +383,22 @@ public class Client {
 		}
 		
 		try {
-			this.setServerAddress(InetAddress.getByName(args[1]));
+			InetAddress address = InetAddress.getByName(args[1]);
+			this.setServerAddress(address);
+			if (args.length == 3) {
+				// Parse port
+				try {
+					int port = Integer.parseInt(args[2]);
+					this.serverPort = port;
+					c.println("Connected to "+address+" on port "+port);
+				} catch (NumberFormatException e) {
+					c.println("Invalid port: \"" + args[2] + "\"");
+				}
+			} else {
+				c.println("Connected to "+address+" on port 69");
+			}
 		} catch (UnknownHostException e) {
 			c.println("Invalid server: \"" + args[1] + "\"");
-		}
-		
-		if (args.length == 3) {
-			// Parse port
-			try {
-				this.serverPort = Integer.parseInt(args[2]);
-			} catch (NumberFormatException e) {
-				c.println("Invalid port: \"" + args[2] + "\"");
-			}
 		}
 	}
 	
@@ -410,15 +414,15 @@ public class Client {
 	
 	private void helpCmd (Console c, String[] args) {
 		c.println("Avaliable Client Commands:");
-		c.println("connect [server] <ip>\n\tSelect a server, if port is not specified port 69 will be used.");
-		c.println("put [local file] <remote file>\n\tSend a file to the server.");
-		c.println("get [remote file] <local file>\n\tGet a file from the server.");
-		c.println("logfile [file path]\n\tSet the log file.");
-		c.println("verbose\n\tEnable debugging output.");
-		c.println("quiet\n\tDisable debugging output.");
-		c.println("test\n\tSets Client to send to port 23 (Error simulator port).");
-		c.println("normal\n\tSets Client to send to port 69 (Server port)");
-		c.println("shutdown\n\tShutdown client.");
+		c.println("connect [ip] <port> - Select a server, if port is not specified port 69 will be used.");
+		c.println("put [local filename] <remote filename> - Send a file to the server.");
+		c.println("get [remote filename] <local filename - Get a file from the server.");
+		c.println("logfile [file path] - Set the log file.");
+		c.println("verbose - Enable more detailed console output.");
+		c.println("quiet - Limit console output to essential and convenient information.");
+		c.println("test - Sets Client to send to port 23 (Error simulator port).");
+		c.println("normal - Sets Client to send to port 69 (Server port)");
+		c.println("shutdown - Shutdown client.");
 		
 	}
 	

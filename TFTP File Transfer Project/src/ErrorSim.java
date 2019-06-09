@@ -145,7 +145,6 @@ class Errors {
 	/**
 	 * Creates a backup copy of the error list that can be restored at a later time
 	 */
-	@SuppressWarnings("unchecked")
 	public synchronized void backupErrors() {
 		errorsBackup.clear();
 		int i;
@@ -1260,6 +1259,7 @@ public class ErrorSim {
 				c.printerr("Error closing console thread.");
 				System.exit(1);
 			}
+			c.println("Shutting down Error Simulator...");
 			System.exit(0);
 		}
 	}
@@ -1271,6 +1271,7 @@ public class ErrorSim {
 		} else {
 			clientListener.verbose = true;
 			serverListener.verbose = true;
+			c.println("Running in verbose mode.");
 		}
 	}
 	
@@ -1281,6 +1282,7 @@ public class ErrorSim {
 		} else {
 			clientListener.verbose = false;
 			serverListener.verbose = false;
+			c.println("Running in quiet mode.");
 		}
 	}
 	
@@ -1295,6 +1297,7 @@ public class ErrorSim {
 			
 			if(port > 0 && port < 65536) {
 				clientListener.setClientKnownPort(port);
+				c.println("Client port set to: " + port);
 			}
 			else {
 				c.println("Invalid argument");
@@ -1325,6 +1328,7 @@ public class ErrorSim {
 				serverListener = new ErrorSimServerListener(port, serverAddress, verbose, this);
 				serverListenerThread = new Thread(serverListener);
 				serverListenerThread.start();
+				c.println("Server port set to: " + port);
 			}
 			else {
 				c.println("Invalid argument");
@@ -1337,7 +1341,7 @@ public class ErrorSim {
 		if(args.length > 2) {
 			c.println("Error: Too many parameters.");
 		} else if(args.length == 1) {
-			c.println("Server ip " + this.serverListener.getServerAddress());
+			c.println("Server ip: " + this.serverListener.getServerAddress());
 		} else if(args.length == 2) {
 			try {
 				int serverPort = this.serverListener.getServerKnownPort();
@@ -1352,6 +1356,7 @@ public class ErrorSim {
 				serverListener = new ErrorSimServerListener(serverPort, serverAddress, verbose, this);
 				serverListenerThread = new Thread(serverListener);
 				serverListenerThread.start();
+				c.println("Server ip set to: " + this.serverListener.getServerAddress());
 			} catch (UnknownHostException e) {
 				c.println("Invalid argument");
 			} catch (InterruptedException e) {
@@ -1380,6 +1385,9 @@ public class ErrorSim {
 						Integer.parseInt(args[2]),			//Packet number
 						0,									//Time delay - not used here
 						Integer.parseInt(args[3])));		//How many times to perform
+				if (clientListener.verbose) {
+					c.println(errors.toString());
+				}
 			}
 			catch(IllegalArgumentException e) {
 				c.println("Could not create error: " + e.getMessage());
@@ -1407,6 +1415,9 @@ public class ErrorSim {
 						Integer.parseInt(args[2]),			//Packet number
 						Integer.parseInt(args[3]),			//Time delay
 						Integer.parseInt(args[4])));		//How many times to perform
+				if (clientListener.verbose) {
+					c.println(errors.toString());
+				}
 			}
 			catch(IllegalArgumentException e) {
 				c.println("Could not create error: " + e.getMessage());
@@ -1434,6 +1445,9 @@ public class ErrorSim {
 						Integer.parseInt(args[2]),				//Packet number
 						Integer.parseInt(args[3]),				//Time delay
 						Integer.parseInt(args[4])));			//How many times to perform
+				if (clientListener.verbose) {
+					c.println(errors.toString());
+				}
 			}
 			catch(IllegalArgumentException e) {
 				c.println("Could not create error: " + e.getMessage());
@@ -1461,6 +1475,9 @@ public class ErrorSim {
 						Integer.parseInt(args[2]),					//Packet Number
 						0,											//param1 - not used here
 						Integer.parseInt(args[3])));				//How many times to perform
+				if (clientListener.verbose) {
+					c.println(errors.toString());
+				}
 			}
 			catch(IllegalArgumentException e) {
 				c.println("Could not create error: " + e.getMessage());
@@ -1490,6 +1507,9 @@ public class ErrorSim {
 						Integer.parseInt(args[2]),						//Packet Number
 						0,												//param1 - not used here
 						Integer.parseInt(args[3])));					//How many times to perform
+				if (clientListener.verbose) {
+					c.println(errors.toString());
+				}
 			}
 			catch(IllegalArgumentException e) {
 				c.println("Could not create error: " + e.getMessage());
@@ -1517,6 +1537,9 @@ public class ErrorSim {
 						Integer.parseInt(args[2]),						//Packet Number
 						0,												//param1 - not used here
 						Integer.parseInt(args[3])));					//How many times to perform
+				if (clientListener.verbose) {
+					c.println(errors.toString());
+				}
 			}
 			catch(IllegalArgumentException e) {
 				c.println("Could not create error: " + e.getMessage());
@@ -1544,6 +1567,9 @@ public class ErrorSim {
 						Integer.parseInt(args[2]),						//Packet Number
 						0,												//param1 - not used here
 						Integer.parseInt(args[3])));					//How many times to perform
+				if (clientListener.verbose) {
+					c.println(errors.toString());
+				}
 			}
 			catch(IllegalArgumentException e) {
 				c.println("Could not create error: " + e.getMessage());
@@ -1571,6 +1597,9 @@ public class ErrorSim {
 							Integer.parseInt(args[2]),					//Packet Number
 							Integer.parseInt(args[3]),					//param1 - new which zero byte to remove (1 or 2)
 							Integer.parseInt(args[4])));				//How many times to perform
+					if (clientListener.verbose) {
+						c.println(errors.toString());
+					}
 				}
 				catch(IllegalArgumentException e) {
 					c.println("Could not create error: " + e.getMessage());
@@ -1611,6 +1640,9 @@ public class ErrorSim {
 						Integer.parseInt(args[2]),						//Packet Number
 						Integer.parseInt(args[3]),						//param1 - how many bytes to append
 						Integer.parseInt(args[4])));					//How many times to perform
+				if (clientListener.verbose) {
+					c.println(errors.toString());
+				}
 			}
 			catch(IllegalArgumentException e) {
 				c.println("Could not create error: " + e.getMessage());
@@ -1638,6 +1670,9 @@ public class ErrorSim {
 						Integer.parseInt(args[2]),							//Packet Number
 						Integer.parseInt(args[3]),							//param1 - new block number
 						Integer.parseInt(args[4])));						//How many times to perform
+				if (clientListener.verbose) {
+					c.println(errors.toString());
+				}
 			}
 			catch(IllegalArgumentException e) {
 				c.println("Could not create error: " + e.getMessage());
@@ -1665,6 +1700,9 @@ public class ErrorSim {
 						Integer.parseInt(args[2]),							//Packet Number
 						Integer.parseInt(args[3]),							//param1 - new error number
 						Integer.parseInt(args[4])));						//How many times to perform
+				if (clientListener.verbose) {
+					c.println(errors.toString());
+				}
 			}
 			catch(IllegalArgumentException e) {
 				c.println("Could not create error: " + e.getMessage());
@@ -1699,6 +1737,9 @@ public class ErrorSim {
 			else {
 				if(errors.remove(errornum)) {
 					c.println("Error " + errornum + " removed.");
+					if (clientListener.verbose) {
+						c.println(errors.toString());
+					}
 				}
 				else {
 					c.println("Could not remove error " + errornum + ".");
@@ -1714,6 +1755,7 @@ public class ErrorSim {
 		}
 		else {
 			errors.restoreErrors();
+			c.println("Errors recalled to previous state.");
 		}
 	}
 	
@@ -1725,6 +1767,7 @@ public class ErrorSim {
 		else {
 			clientListener.cancelDelayedSend();
 			serverListener.cancelDelayedSend();
+			c.println("Cleared all remaining errors.");
 		}
 	}
 	
@@ -1738,62 +1781,62 @@ public class ErrorSim {
 		c.println("");
 		c.println("quiet - Makes the error simulator output only basic information.");
 		c.println("");
-		c.println("clientport[x] - Outputs the port used to listen to requests from the client.");
-		c.println("                If parameter X is provided, then the port is changed to X.");
+		c.println("clientport <port> - Outputs the port used to listen to requests from the client.");
+		c.println("                If a port is provided, then the port is changed to that port.");
 		c.println("");
-		c.println("serverport[x] - Outputs the port on the server the ErrorSim communicates with.");
-		c.println("                If parameter X is provided, then the port is changed to X.");
+		c.println("serverport <port> - Outputs the port on the server the ErrorSim communicates with.");
+		c.println("                If a port is provided, then the port is changed to that port.");
 		c.println("");
-		c.println("serverip[x] - Outputs the IP address for the server.");
-		c.println("              If parameter X is provided, then the address is changed to X.");
+		c.println("serverip <ip> - Outputs the IP address for the server.");
+		c.println("              If an ip is provided, then the address is changed to that ip.");
 		c.println("");
 		c.println("errors - Shows a list of all pending errors.");
 		c.println("");
-		c.println("rm[x] - Removes pending error [x].");
+		c.println("rm [x] - Removes pending error [x].");
 		c.println("");
 		c.println("recall - Restores the errorlist to its state before the last TFTP transaction.");
 		c.println("");
 		c.println("reset - Cancels the sending of all delayed packets.");
 		c.println("");
-		c.println("drop[packet type][packet number][# of times] - drops a packet.");
+		c.println("drop [packet type][packet number][# of times] - drops a packet.");
 		c.println("    [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
 		c.println("    [packet number] - the packets block number, or the nth packet seen.");
 		c.println("    [# of times] - how many times this error should be created.");
 		c.println("");
-		c.println("delay[packet type][packet number][delay][# of times] - delays a packet.");
+		c.println("delay [packet type][packet number][delay][# of times] - delays a packet.");
 		c.println("     [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
 		c.println("     [packet number] - the packets block number, or the nth packet seen.");
 		c.println("     [delay] - time in ms between duplicated packets.");
 		c.println("     [# of times] - how many times this error should be created.");
 		c.println("");
-		c.println("duplicate[packet type][packet number][delay][# of times] - duplicates a packet.");
+		c.println("duplicate [packet type][packet number][delay][# of times] - duplicates a packet.");
 		c.println("         [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
 		c.println("     	[packet number] - the packets block number, or the nth packet seen.");
 		c.println("     	[delay] - time in ms between duplicated packets.");
 		c.println("     	[# of times] - how many times this error should be created.");
 		c.println("");
-		c.println("tid[packet type][packet number][# of times] - invalidates TID for a packet.");
+		c.println("tid [packet type][packet number][# of times] - invalidates TID for a packet.");
 		c.println("   [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
 		c.println("   [packet number] - the packets block number, or the nth packet seen.");
 		c.println("   [# of times] - how many times this error should be created.");
 		c.println("");
-		c.println("opcode[packet type][packet number][# of times] - invalidates opcode for a packet");
+		c.println("opcode [packet type][packet number][# of times] - invalidates opcode for a packet");
 		c.println("      [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
 		c.println("      [packet number] - the packets block number, or the nth packet seen.");
 		c.println("      [# of times] - how many times this error should be created.");
 		c.println("");
-		c.println("mode[packet type][packet number][# of times] - invalidates mode for a packet.");
+		c.println("mode [packet type][packet number][# of times] - invalidates mode for a packet.");
 		c.println("    [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
 		c.println("    [packet number] - the packets block number, or the nth packet seen.");
 		c.println("    [# of times] - how many times this error should be created.");
 		c.println("    NOTE: This command is only applicable to RRQ and WRQ packets.");
 		c.println("");
-		c.println("shrink[packet type][packet number][# of times] - shrinks packet below min size.");
+		c.println("shrink [packet type][packet number][# of times] - shrinks packet below min size.");
 		c.println("      [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
 		c.println("      [packet number] - the packets block number, or the nth packet seen.");
 		c.println("      [# of times] - how many times this error should be created.");
 		c.println("");
-		c.println("rmz[packet type][packet number][pos][# of times] - removes '0' byte from packet.");
+		c.println("rmz [packet type][packet number][pos][# of times] - removes '0' byte from packet.");
 		c.println("   [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
 		c.println("   [packet number] - the packets block number, or the nth packet seen.");
 		c.println("   [pos] - which '0' byte to remove. 1 for 1st, 2 for 2nd.");
@@ -1801,19 +1844,19 @@ public class ErrorSim {
 		c.println("   NOTE: This command is only applicable to RRQ, WRQ and ERROR packets. Do not");
 		c.println("         specify [pos] for an error packet as there is only one '0' byte.");
 		c.println("");
-		c.println("append[packet type][packet number][# of bytes][# of times] - append random data.");
+		c.println("append [packet type][packet number][# of bytes][# of times] - append random data.");
 		c.println("      [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
 		c.println("      [packet number] - the packets block number, or the nth packet seen.");
 		c.println("      [# of bytes] - how many bytes to append to the packet.");
 		c.println("      [# of times] - how many times this error should be created.");
 		c.println("");
-		c.println("blocknum[packet type][packet number][new][# of times] - changes block number.");
+		c.println("blocknum [packet type][packet number][new][# of times] - changes block number.");
 		c.println("        [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
 		c.println("        [packet number] - the packets block number, or the nth packet seen.");
 		c.println("        [new] - the new block number.");
 		c.println("        [# of times] - how many times this error should be created.");
 		c.println("");
-		c.println("errornum[packet type][packet number][new][# of times] - changes error number.");
+		c.println("errornum [packet type][packet number][new][# of times] - changes error number.");
 		c.println("        [packet type] - the type of packet. (RRQ, WRQ, DATA, ACK, ERROR)");
 		c.println("        [packet number] - the packets block number, or the nth packet seen.");
 		c.println("        [new] - the new error number.");
@@ -1898,7 +1941,7 @@ public class ErrorSim {
 	        System.exit(1);
 	    }
 		
-		System.out.println("Error Simulator Running");
+		System.out.println("Starting Error Simulator...");
 		
 		if(verbose) {
 			System.out.println("Listening to client on port " + clientPort);
