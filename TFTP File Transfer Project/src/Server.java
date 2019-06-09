@@ -47,7 +47,7 @@ public class Server {
 		}
 		else {
 			c.println("Shutting down Server...");
-			logger.endLog(0);
+			logger.endLog();
 			this.listener.close();
 			try {
 				c.close();
@@ -241,9 +241,12 @@ class ServerListener implements Runnable {
 	    		receiveSocket.receive(receivePacket);
 	    	} catch(IOException e) {
 	    		if(!e.getMessage().equals("socket closed")) {
+	    			// An IOException occurred listening for packages. (Nowhere to send errors, exit)
+	    			logger.log(LogLevel.FATAL, "Error: SocketException. Reason: Listener Socket Failed to Recieve. Solution: Shutting down Server.");
 		    		e.printStackTrace();
 	    			System.exit(1);
 	    		} else {
+	    			// The socket was closed to shutdown the listener thread.
 	    			return;
 	    		}
 	    	}
@@ -399,11 +402,9 @@ class ReadHandler extends RequestHandler implements Runnable {
 				break;
 			case FILE_IO_ERROR:
 				logger.log(LogLevel.FATAL, "File transfer failed. File IO error.");
-				// TODO - Send an Error Packet here? Or just die?... (file.read - No Action; file.write - send disk_full error and come here; file.getChannel().size() - No Action)
 				break;
 			case FILE_TOO_LARGE:
 				logger.log(LogLevel.FATAL, "File transfer failed. File too large.");
-				// TODO
 				break;
 			case LAST_BLOCK_ACK_TIMEOUT:
 				logger.log(LogLevel.ERROR, "File transfer may have failed. Timed out waiting for client to acknowledge last block.");
@@ -413,7 +414,6 @@ class ReadHandler extends RequestHandler implements Runnable {
 				break;
 			case PEER_DISK_FULL:
 				logger.log(LogLevel.FATAL, "File transfer failed. Client disk full.");
-				// TODO
 				break;
 			case PEER_ERROR:
 				logger.log(LogLevel.ERROR, "File transfer failed. Error Packet Received from client.");
@@ -431,23 +431,23 @@ class ReadHandler extends RequestHandler implements Runnable {
 				logger.log(LogLevel.FATAL, String.format(
 						"File transfer failed. Unkown error occured: \"%s\"", 
 						transaction.getState().toString()));
-				// TODO
+				sendErrorPacket(TFTPPacket.TFTPError.ERROR, "The file transfer failed for an unknown reason. Terminating Transfer.");
 				break;
 				
 			}
 		} catch (FileNotFoundException e) {			
-			// if the file does not exist,is a directory rather than a regular file,or for some other reason cannot be opened for reading.
-		
+			// If the file does not exist,is a directory rather than a regular file,or for some other reason cannot be opened for reading.
 		    File fileToTest = new File(filename);
 		    if (fileToTest.exists() && fileToTest.isFile())
 		    {
 		        // The file exists and is a file.. Must be an access violation (or some other error)
 		    	if(!fileToTest.canRead()) {
-		    		logger.log(LogLevel.ERROR, String.format("The file: "+filename+" could not be opened for reading."));
-		    		sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be opened for reading.");
+		    		logger.log(LogLevel.ERROR, String.format("The file: "+filename+" could not be opened for reading due to access privalages."));
+		    		sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be opened for reading due to access privalages.");
 		    	} else {
-		    		// TODO - Some other error. (Do the same thing we do as an IO Error?
-		    		logger.log(LogLevel.ERROR, String.format("File IOError trying to open the file for reading."));
+		    		// Some other unknown error.
+		    		logger.log(LogLevel.ERROR, String.format("File IOError trying to open the file for reading for an unknown reason."));
+		    		sendErrorPacket(TFTPPacket.TFTPError.ERROR, "The file \""+filename+"\" could not be opened for reading for an unknown reason.");
 		    	}
 		    } else {
 		    	// The file does not exist or is already a directory!
@@ -516,11 +516,9 @@ class WriteHandler extends RequestHandler implements Runnable {
 					break;
 				case FILE_IO_ERROR:
 					logger.log(LogLevel.FATAL, "File transfer failed. File IO error.");
-					// TODO
 					break;
 				case FILE_TOO_LARGE:
 					logger.log(LogLevel.FATAL, "File transfer failed. File too large.");
-					// TODO
 					break;
 				case PEER_BAD_PACKET:
 					logger.log(LogLevel.ERROR, "File transfer failed. Client received a bad packet. Error packet response received.");
@@ -541,12 +539,11 @@ class WriteHandler extends RequestHandler implements Runnable {
 					logger.log(LogLevel.FATAL, String.format(
 							"File transfer failed. Unkown error occured: \"%s\"", 
 							transaction.getState().toString()));
-					// TODO
+					sendErrorPacket(TFTPPacket.TFTPError.ERROR, "The file transfer failed for an unknown reason. Terminating Transfer.");
 					break;
 			}
 		} catch (FileNotFoundException e) {
-			// if the file does not exist,is a directory rather than a regular file,or for some other reason cannot be opened for writing.
-			
+			// If the file does not exist,is a directory rather than a regular file,or for some other reason cannot be opened for writing.
 		    File fileToTest = new File(filename);
 		    if (fileToTest.exists() && fileToTest.isFile())
 		    {
@@ -559,11 +556,12 @@ class WriteHandler extends RequestHandler implements Runnable {
 		    		} else {
 		    			// Some other reason it can't be written
 		    			logger.log(LogLevel.ERROR, String.format("The file: "+filename+" could not be opened for writing."));
-			    		sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be opened for writing.");
+			    		sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be opened for writing due to an access violation.");
 		    		}
 		    	} else {
-		    		// TODO - Some other error. (Do the same thing we do as an IO Error?)
-		    		logger.log(LogLevel.ERROR, String.format("File IOError trying to open the file for writing."));
+		    		// Some other unknown error.
+		    		logger.log(LogLevel.ERROR, String.format("The file \""+filename+"\" could not be opened for writing due to an unknown file IOError"));
+		    		sendErrorPacket(TFTPPacket.TFTPError.ERROR, "The file \""+filename+"\" could not be opened for writing due to an unknown file IOError");
 		    	}
 		    } else {
 		    	// The file does not exist or is already a directory!
