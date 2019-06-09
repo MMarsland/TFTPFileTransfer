@@ -1,5 +1,6 @@
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.File;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -170,6 +171,13 @@ public class Client {
 			remoteFile = args[2];
 		}
 		
+		// Aborts write request if the local file doesn't exist.
+		File clientFile = new File(args[1]);
+		if(!clientFile.isFile()) {
+			c.println("Local file doesn't exist.  Aborting write request");
+			return;
+		}
+		
 		// Create socket for request
 		DatagramSocket sendReceiveSocket = null;
 		try {
@@ -251,7 +259,7 @@ public class Client {
 				break;
 			}
 		} catch (FileNotFoundException e) {
-			c.println(String.format("File not found: \"%s\".", args[1]));
+			c.println(String.format("Could not access file: \"%s\".", args[1]));
 		} catch (IOException e1) {
 			c.println("Failed to close file after transaction completed.");
 		}
@@ -283,6 +291,13 @@ public class Client {
 		} else {
 			// Local name is specified explicitly
 			localFile = args[2];
+		}
+		
+		// Checks if the local file already exists to avoid overwriting files
+		File clientFile = new File(localFile);
+		if(clientFile.isFile()) {
+			c.println("Local file already exists.  Aborting write request.");
+			return;
 		}
 		
 		// Create socket for request
@@ -363,7 +378,8 @@ public class Client {
 				break;
 			}
 		} catch (FileNotFoundException e) {
-			c.println(String.format("File not found: \"%s\".", args[1]));
+			c.println(String.format("File could not be accessed: \"%s\".", args[1]));
+			c.println("Aborting read request.");
 		} catch (IOException e1) {
 			c.println("Failed to close file after transaction completed.");
 		}
