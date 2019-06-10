@@ -112,7 +112,7 @@ public abstract class TFTPPacket {
 		case OACK:
 			return new TFTPPacket.OACK(bytes);
 		default:
-			throw new IllegalArgumentException("Unkown Opcode");
+			throw new InvalidOpcodeException("Unkown Opcode");
 		}
 	}
 	
@@ -200,6 +200,19 @@ public abstract class TFTPPacket {
 				return "NETASCII";
 			}
 		}
+	}
+	
+	/**
+	 * Exception thrown when a packet has an invalid opcode
+	 * 
+	 * @author Samuel Dewan
+	 */
+	public static class InvalidOpcodeException extends IllegalArgumentException { 
+		private static final long serialVersionUID = 1L;
+
+		public InvalidOpcodeException(String errorMessage) {
+	        super(errorMessage);
+	    }
 	}
 	
 	/**
@@ -508,7 +521,7 @@ public abstract class TFTPPacket {
 			} else if (TFTPOpcode.fromInt(ByteBuffer.wrap(
 					new byte[] {0, 0, bytes[0], bytes[1]}).getInt()) !=
 					opcode) {
-				throw new IllegalArgumentException(
+				throw new InvalidOpcodeException(
 						"Incorrect opcode for request");
 			}
 			
@@ -767,7 +780,7 @@ public abstract class TFTPPacket {
 			} else if (TFTPOpcode.fromInt(ByteBuffer.wrap(
 					new byte[] {0, 0, bytes[0], bytes[1]}).getInt()) !=
 					TFTPOpcode.DATA) {
-				throw new IllegalArgumentException(
+				throw new InvalidOpcodeException(
 						"Incorrect opcode for data packet");
 			}
 			
@@ -875,7 +888,7 @@ public abstract class TFTPPacket {
 			} else if (TFTPOpcode.fromInt(ByteBuffer.wrap(
 					new byte[] {0, 0, bytes[0], bytes[1]}).getInt()) !=
 					TFTPOpcode.ACK) {
-				throw new IllegalArgumentException(
+				throw new InvalidOpcodeException(
 						"Incorrect opcode for ACK packet");
 			}
 			
@@ -965,7 +978,7 @@ public abstract class TFTPPacket {
 			} else if (TFTPOpcode.fromInt(ByteBuffer.wrap(
 					new byte[] {0, 0, bytes[0], bytes[1]}).getInt()) !=
 					TFTPOpcode.ERROR) {
-				throw new IllegalArgumentException(
+				throw new InvalidOpcodeException(
 						"Incorrect opcode for error packet");
 			}
 			
@@ -1074,7 +1087,7 @@ public abstract class TFTPPacket {
 			} else if (TFTPOpcode.fromInt(ByteBuffer.wrap(
 					new byte[] {0, 0, bytes[0], bytes[1]}).getInt()) !=
 					TFTPOpcode.OACK) {
-				throw new IllegalArgumentException(
+				throw new InvalidOpcodeException(
 						"Incorrect opcode for option acknowledgment packet");
 			}
 			

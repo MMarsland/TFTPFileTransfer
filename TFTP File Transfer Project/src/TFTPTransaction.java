@@ -1,4 +1,5 @@
 import java.io.Closeable;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -431,8 +432,7 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 									TFTPPacket.TFTPError.ILLEGAL_OPERATION,
 									String.format("Not a valid packet. " + 
 										"Expected ACK %d.", i));
-							if (e.getMessage().equalsIgnoreCase(
-									"Unkown Opcode")) {
+							if (e instanceof TFTPPacket.InvalidOpcodeException) {
 								super.state =
 								   TFTPTransactionState.RECEIVED_INVALID_OPCODE;
 							} else {
@@ -523,6 +523,10 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 		 */
 		private FileOutputStream file;
 		/**
+		 * File object used to test for disk-fullness if an error occures
+		 */
+		private File parentFile;
+		/**
 		 * Whether an ACK 0 packet should be send before waiting for the first
 		 * DATA.
 		 */
@@ -557,6 +561,7 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 			this.updateTID = updateTID;
 			
 			this.file = new FileOutputStream(destFile);
+			this.parentFile = (new File(destFile)).getParentFile();
 		}
 		
 		/**
@@ -633,8 +638,7 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 									TFTPPacket.TFTPError.ILLEGAL_OPERATION,
 									String.format("Not a valid packet. " +
 									"Expected DATA %d.", blockNum));
-							if (e.getMessage().equalsIgnoreCase(
-									"Unkown Opcode")) {
+							if (e instanceof TFTPPacket.InvalidOpcodeException) {
 								super.state =
 								   TFTPTransactionState.RECEIVED_INVALID_OPCODE;
 							} else {
@@ -660,15 +664,16 @@ public abstract class TFTPTransaction implements Runnable, Closeable {
 								super.state =
 										TFTPTransactionState.FILE_IO_ERROR;
 								
-								if (e.getMessage().equalsIgnoreCase(
-										"no space left on device")) {
+								if (this.parentFile.getFreeSpace() == 0) {
+									// Disk is full
 									super.sendErrorPacket(
 											TFTPPacket.TFTPError.DISK_FULL,
 											"Disk full");
 								} else {
 									super.sendErrorPacket(
 											TFTPPacket.TFTPError.ERROR,
-											String.format("Failed to write to the file."));
+											String.format(
+											   "Failed to write to the file."));
 								}
 								
 								return;
