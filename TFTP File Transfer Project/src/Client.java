@@ -285,6 +285,13 @@ public class Client {
 			localFile = args[2];
 		}
 		
+		// Checks if the local file already exists to avoid overwriting files
+		File clientFile = new File(localFile);
+		if(clientFile.isFile()) {
+			c.println("Local file already exists.  Aborting write request.");
+			return;
+		}
+		
 		// Create socket for request
 		DatagramSocket sendReceiveSocket = null;
 		try {
