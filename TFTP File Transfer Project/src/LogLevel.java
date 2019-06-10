@@ -14,6 +14,6 @@ public enum LogLevel {
     }
 
     public boolean shouldLog(LogLevel other) {
-        return this.severity <= other.severity;
+        return this.severity >= other.severity;
     }
 }

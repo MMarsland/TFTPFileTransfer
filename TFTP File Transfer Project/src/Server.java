@@ -2,6 +2,7 @@
  * The Server for the TFTP client-server project
  */
 
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -29,8 +30,8 @@ public class Server {
 	
 	public Server(int serverPort, LogLevel verboseLevel, String logFilePath) {
 		
-		logger.setVerboseLevel(verboseLevel);
-		logger.setLogFile(logFilePath);
+		logger.setVerboseLevel(verboseLevel, true);
+		logger.setLogFile(logFilePath, true);
 		
 		this.listener = new ServerListener(serverPort, logger);
 		this.listenerThread = new Thread(listener);
@@ -46,6 +47,7 @@ public class Server {
 		}
 		else {
 			c.println("Shutting down Server...");
+			logger.endLog();
 			this.listener.close();
 			try {
 				c.close();
@@ -63,7 +65,7 @@ public class Server {
 		}
 		else {
 			c.println("Running in verbose mode.");
-			logger.setVerboseLevel(LogLevel.INFO);
+			logger.setVerboseLevel(LogLevel.INFO, false);
 		}
 	}
 	
@@ -73,7 +75,7 @@ public class Server {
 		}
 		else {
 			c.println("Running in quiet mode.");
-			logger.setVerboseLevel(LogLevel.QUIET);
+			logger.setVerboseLevel(LogLevel.QUIET, false);
 		}
 	}
 	
@@ -87,7 +89,7 @@ public class Server {
 			c.println("Too many arguments.");
 			return;
 		}
-		logger.setLogFile(args[1]);
+		logger.setLogFile(args[1], false);
 	}
 	
 	private void setServerPortCmd (Console c, String[] args) {
@@ -117,7 +119,7 @@ public class Server {
 		logger.log(LogLevel.QUIET, "Starting Server..."); 
 		
 		//Initialize settings to default values
-		LogLevel verboseLevel = LogLevel.FATAL;
+		LogLevel verboseLevel = LogLevel.QUIET;
 		int serverPort = 69;
 		String logFilePath = "";
 		
@@ -239,9 +241,12 @@ class ServerListener implements Runnable {
 	    		receiveSocket.receive(receivePacket);
 	    	} catch(IOException e) {
 	    		if(!e.getMessage().equals("socket closed")) {
+	    			// An IOException occurred listening for packages. (Nowhere to send errors, exit)
+	    			logger.log(LogLevel.FATAL, "Error: SocketException. Reason: Listener Socket Failed to Recieve. Solution: Shutting down Server.");
 		    		e.printStackTrace();
 	    			System.exit(1);
 	    		} else {
+	    			// The socket was closed to shutdown the listener thread.
 	    			return;
 	    		}
 	    	}
@@ -397,11 +402,9 @@ class ReadHandler extends RequestHandler implements Runnable {
 				break;
 			case FILE_IO_ERROR:
 				logger.log(LogLevel.FATAL, "File transfer failed. File IO error.");
-				// TODO
 				break;
 			case FILE_TOO_LARGE:
 				logger.log(LogLevel.FATAL, "File transfer failed. File too large.");
-				// TODO
 				break;
 			case LAST_BLOCK_ACK_TIMEOUT:
 				logger.log(LogLevel.ERROR, "File transfer may have failed. Timed out waiting for client to acknowledge last block.");
@@ -411,7 +414,6 @@ class ReadHandler extends RequestHandler implements Runnable {
 				break;
 			case PEER_DISK_FULL:
 				logger.log(LogLevel.FATAL, "File transfer failed. Client disk full.");
-				// TODO
 				break;
 			case PEER_ERROR:
 				logger.log(LogLevel.ERROR, "File transfer failed. Error Packet Received from client.");
@@ -429,14 +431,29 @@ class ReadHandler extends RequestHandler implements Runnable {
 				logger.log(LogLevel.FATAL, String.format(
 						"File transfer failed. Unkown error occured: \"%s\"", 
 						transaction.getState().toString()));
-				// TODO
+				sendErrorPacket(TFTPPacket.TFTPError.ERROR, "The file transfer failed for an unknown reason. Terminating Transfer.");
 				break;
 				
 			}
-		} catch (FileNotFoundException e) {
-			logger.log(LogLevel.ERROR, String.format("File not found on Server: \"%s\".", filename));
-			// Send Error Packet to client
-			sendErrorPacket(TFTPPacket.TFTPError.FILE_NOT_FOUND, "The file \""+filename+"\" could not be found on the Server.");
+		} catch (FileNotFoundException e) {			
+			// If the file does not exist,is a directory rather than a regular file,or for some other reason cannot be opened for reading.
+		    File fileToTest = new File(filename);
+		    if (fileToTest.exists() && fileToTest.isFile())
+		    {
+		        // The file exists and is a file.. Must be an access violation (or some other error)
+		    	if(!fileToTest.canRead()) {
+		    		logger.log(LogLevel.ERROR, String.format("The file: "+filename+" could not be opened for reading due to access privalages."));
+		    		sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be opened for reading due to access privalages.");
+		    	} else {
+		    		// Some other unknown error.
+		    		logger.log(LogLevel.ERROR, String.format("File IOError trying to open the file for reading for an unknown reason."));
+		    		sendErrorPacket(TFTPPacket.TFTPError.ERROR, "The file \""+filename+"\" could not be opened for reading for an unknown reason.");
+		    	}
+		    } else {
+		    	// The file does not exist or is already a directory!
+		    	logger.log(LogLevel.ERROR, String.format("File not found on Server: \"%s\".", filename));
+		    	sendErrorPacket(TFTPPacket.TFTPError.FILE_NOT_FOUND, "The file \""+filename+"\" could not be found on the Server. (May be a directory)");
+		    }
 		} catch (IOException e) {
 			logger.log(LogLevel.ERROR, "Error: File Closure. Reason: Failed to close file when terminating transaction. Solution: Ending Transaction without closing file.");
 		}
@@ -499,11 +516,9 @@ class WriteHandler extends RequestHandler implements Runnable {
 					break;
 				case FILE_IO_ERROR:
 					logger.log(LogLevel.FATAL, "File transfer failed. File IO error.");
-					// TODO
 					break;
 				case FILE_TOO_LARGE:
 					logger.log(LogLevel.FATAL, "File transfer failed. File too large.");
-					// TODO
 					break;
 				case PEER_BAD_PACKET:
 					logger.log(LogLevel.ERROR, "File transfer failed. Client received a bad packet. Error packet response received.");
@@ -524,13 +539,35 @@ class WriteHandler extends RequestHandler implements Runnable {
 					logger.log(LogLevel.FATAL, String.format(
 							"File transfer failed. Unkown error occured: \"%s\"", 
 							transaction.getState().toString()));
-					// TODO
+					sendErrorPacket(TFTPPacket.TFTPError.ERROR, "The file transfer failed for an unknown reason. Terminating Transfer.");
 					break;
 			}
 		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-			logger.log(LogLevel.FATAL, String.format("File not found: \"%s\".", filename));
-			// TODO - Send an error saying that the file could not be written?? WHY?? (Access Violation?)
+			// If the file does not exist,is a directory rather than a regular file,or for some other reason cannot be opened for writing.
+		    File fileToTest = new File(filename);
+		    if (fileToTest.exists() && fileToTest.isFile())
+		    {
+		        // The file exists and is a file.. Must be an access violation (or some other error)
+		    	if(!fileToTest.canWrite()) {
+		    		if(fileToTest.canRead()) {
+		    			// Read-Only
+		    			logger.log(LogLevel.ERROR, String.format("The file: "+filename+" could not be opened for writing because it is read-only."));
+			    		sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be opened for writing because it is read-only.");
+		    		} else {
+		    			// Some other reason it can't be written
+		    			logger.log(LogLevel.ERROR, String.format("The file: "+filename+" could not be opened for writing."));
+			    		sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be opened for writing due to an access violation.");
+		    		}
+		    	} else {
+		    		// Some other unknown error.
+		    		logger.log(LogLevel.ERROR, String.format("The file \""+filename+"\" could not be opened for writing due to an unknown file IOError"));
+		    		sendErrorPacket(TFTPPacket.TFTPError.ERROR, "The file \""+filename+"\" could not be opened for writing due to an unknown file IOError");
+		    	}
+		    } else {
+		    	// The file does not exist or is already a directory!
+		    	logger.log(LogLevel.ERROR, String.format("The file \""+filename+"\" could not be written. May already be a directory."));
+		    	sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be written. May already be a directory.");
+		    }
 		} catch (IOException e) {
 			logger.log(LogLevel.ERROR, "Error: File Closure. Reason: Failed to close file when terminating transaction. Solution: Ending Transaction without closing file.");
 		}

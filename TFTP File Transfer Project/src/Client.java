@@ -1,5 +1,6 @@
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.File;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -43,9 +44,9 @@ public class Client {
 	{
 		this.serverPort = serverPort;
 		
-		log.setVerboseLevel(verboseLevel);
+		log.setVerboseLevel(verboseLevel, true);
 		
-		log.setLogFile(logFilePath);
+		log.setLogFile(logFilePath, true);
 		
 		log.log(LogLevel.INFO,"Setting up send/receive socket.");
 	}
@@ -103,7 +104,7 @@ public class Client {
 		}
 		
 		else {	//If neither file is on the server, print an warning message and returns.
-			log.log(LogLevel.WARN,"Neither file is on the server.  Please try another command.");
+			log.log(LogLevel.WARN,"Neither file is on the server.  Starting interactive mode.");
 		}
 		return;
 	}
@@ -116,13 +117,14 @@ public class Client {
 			System.exit(1);
 		}
 		
+		log.log(LogLevel.QUIET, "Shutting Down Client...");
 		log.endLog();
 		System.exit(0);
 	}
 	
 	private void setVerboseCmd (Console c, String[] args) {
 		c.println("Running in verbose mode.");
-		log.setVerboseLevel(LogLevel.INFO);
+		log.setVerboseLevel(LogLevel.INFO, false);
 	}
 	
 	private void setLogfileCmd (Console c, String[] args) {
@@ -135,18 +137,18 @@ public class Client {
 			c.println("Too many arguments.");
 			return;
 		}
-		log.setLogFile(args[1]);
+		log.setLogFile(args[1], false);
 	}
 
 	private void setQuietCmd (Console c, String[] args) {
 		c.println("Running in quiet mode.");
-		log.setVerboseLevel(LogLevel.WARN);
+		log.setVerboseLevel(LogLevel.WARN, false);
 	}
 	
 	private void putCmd (Console c, String[] args) {
 		if (args.length < 2) {
 			// Not enough arguments
-			c.println("Too few arguments.");
+			c.println("Error: Too few arguments.  Solution: returning to interactive mode.");
 			return;
 		} else if (args.length > 3) {
 			// Too many arguments
@@ -167,6 +169,13 @@ public class Client {
 		} else {
 			// Remote name is specified explicitly
 			remoteFile = args[2];
+		}
+		
+		// Aborts write request if the local file doesn't exist.
+		File clientFile = new File(args[1]);
+		if(!clientFile.isFile()) {
+			c.println("Local file doesn't exist.  Aborting write request");
+			return;
 		}
 		
 		// Create socket for request
@@ -250,9 +259,9 @@ public class Client {
 				break;
 			}
 		} catch (FileNotFoundException e) {
-			c.println(String.format("File not found: \"%s\".", args[1]));
+			c.println(String.format("Error: Could not access file: \"%s\".  Returning to interactive mode.", args[1]));
 		} catch (IOException e1) {
-			c.println("Failed to close file after transaction completed.");
+			c.println("Error: Failed to close file after transaction completed.  Returning to interactive mode.");
 		}
 		
 		sendReceiveSocket.close();
@@ -290,7 +299,7 @@ public class Client {
 			sendReceiveSocket = new DatagramSocket();
 			sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
 		} catch(SocketException se) {
-			c.printerr("Could not create socket for transaction");
+			c.printerr("Error: Could not create socket for transaction.  Returning to interactive mode.");
 			return;
 		}
 
@@ -309,7 +318,7 @@ public class Client {
 			try {
 				sendReceiveSocket.send(request);
 			} catch(IOException e) {
-				c.printerr("Failed to send request to server.");
+				c.printerr("Error: Failed to send request to server.  Returning to interactive mode.");
 				return;
 			}
 			
@@ -362,9 +371,10 @@ public class Client {
 				break;
 			}
 		} catch (FileNotFoundException e) {
-			c.println(String.format("File not found: \"%s\".", args[1]));
+			c.println(String.format("Error: File could not be accessed: \"%s\".  Returning to interactive mode.", args[1]));
+			c.println("Aborting read request.");
 		} catch (IOException e1) {
-			c.println("Failed to close file after transaction completed.");
+			c.println("Error: Failed to close file after transaction completed.  Returning to interactive mode");
 		}
 		
 		sendReceiveSocket.close();
@@ -382,18 +392,22 @@ public class Client {
 		}
 		
 		try {
-			this.setServerAddress(InetAddress.getByName(args[1]));
-		} catch (UnknownHostException e) {
-			c.println("Invalid server: \"" + args[1] + "\"");
-		}
-		
-		if (args.length == 3) {
-			// Parse port
-			try {
-				this.serverPort = Integer.parseInt(args[2]);
-			} catch (NumberFormatException e) {
-				c.println("Invalid port: \"" + args[2] + "\"");
+			InetAddress address = InetAddress.getByName(args[1]);
+			this.setServerAddress(address);
+			if (args.length == 3) {
+				// Parse port
+				try {
+					int port = Integer.parseInt(args[2]);
+					this.serverPort = port;
+					c.println("Connected to "+address+" on port "+port);
+				} catch (NumberFormatException e) {
+					c.println("Invalid port: \"" + args[2] + "\"");
+				}
+			} else {
+				c.println("Connected to "+address+" on port 69");
 			}
+		} catch (UnknownHostException e) {
+			c.println("Error: Invalid server: \"" + args[1] + "\".  Returning to interactive mode");
 		}
 	}
 	
@@ -409,23 +423,23 @@ public class Client {
 	
 	private void helpCmd (Console c, String[] args) {
 		c.println("Avaliable Client Commands:");
-		c.println("connect [server] <ip>\n\tSelect a server, if port is not specified port 69 will be used.");
-		c.println("put [local file] <remote file>\n\tSend a file to the server.");
-		c.println("get [remote file] <local file>\n\tGet a file from the server.");
-		c.println("logfile [file path]\n\tSet the log file.");
-		c.println("verbose\n\tEnable debugging output.");
-		c.println("quiet\n\tDisable debugging output.");
-		c.println("test\n\tSets Client to send to port 23 (Error simulator port).");
-		c.println("normal\n\tSets Client to send to port 69 (Server port)");
-		c.println("shutdown\n\tShutdown client.");
+		c.println("connect [ip] <port> - Select a server, if port is not specified port 69 will be used.");
+		c.println("put [local filename] <remote filename> - Send a file to the server.");
+		c.println("get [remote filename] <local filename - Get a file from the server.");
+		c.println("logfile [file path] - Set the log file.");
+		c.println("verbose - Enable more detailed console output.");
+		c.println("quiet - Limit console output to essential and convenient information.");
+		c.println("test - Sets Client to send to port 23 (Error simulator port).");
+		c.println("normal - Sets Client to send to port 69 (Server port)");
+		c.println("shutdown - Shutdown client.");
 		
 	}
 	
 	public static void main(String[] args) {
-		log.log(LogLevel.INFO,"Setting up Client...");
+		log.log(LogLevel.QUIET,"Starting Client...");
 		
 		int serverPort = 69;
-		LogLevel verboseLevel = LogLevel.WARN;
+		LogLevel verboseLevel = LogLevel.QUIET;
 		String logFilePath = "";
 		
 		//Setting up the parsing options
@@ -467,7 +481,7 @@ public class Client {
 	        	logFilePath = line.getOptionValue("l");
 	        }
 	    } catch( ParseException exp ) {
-	    	log.log(LogLevel.FATAL, "Command line argument parsing failed.  Reason: " + exp.getMessage() );
+	    	log.log(LogLevel.FATAL, "Fatal Error: Command line argument parsing failed.  Reason: " + exp.getMessage() );
 		    System.exit(1);
 	    }
 	    
@@ -496,14 +510,14 @@ public class Client {
 			try {
 				client.setServerAddress(InetAddress.getByName(positionalArgs[0]));
 			} catch (UnknownHostException e) {
-				log.log(LogLevel.WARN, "Invalid server: \"" + positionalArgs[0] + "\"");
+				log.log(LogLevel.QUIET, "Invalid server: \"" + positionalArgs[0] + "\"");
 			}
 		} else if (positionalArgs.length == 2) {
 			// Source and destination files specified
 			client.buildRequest(positionalArgs[0], positionalArgs[1], console);
 		} else if (positionalArgs.length > 2) {
 			// Too many arguments
-			log.log(LogLevel.WARN,"Too many files specified, entering interactive mode.");
+			log.log(LogLevel.QUIET,"Too many files specified, entering interactive mode.");
 		}
 
 		// Start console UI thread

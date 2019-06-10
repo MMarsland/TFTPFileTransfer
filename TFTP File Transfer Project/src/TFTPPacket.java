@@ -112,7 +112,7 @@ public abstract class TFTPPacket {
 		case OACK:
 			return new TFTPPacket.OACK(bytes);
 		default:
-			throw new IllegalArgumentException("Unkown Opcode.");
+			throw new IllegalArgumentException("Unkown Opcode");
 		}
 	}
 	

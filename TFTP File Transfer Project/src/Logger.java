@@ -14,21 +14,25 @@ public class Logger {
 		fileopen = false;
 	}
 	
-	public void setLogFile(String file) {
+	public void setLogFile(String file, boolean initalize) {
 		try {
 			this.file = new FileOutputStream(file);
 		} catch (FileNotFoundException e) {
 			if(file == "") {
-				System.out.println("No Log File Specified");
+				if (!initalize) {
+					System.out.println("No Log File Specified");
+				}
 			} else {
 				System.out.println("Failed to open log file");
 			}
 		}
 	}
 
-	public void setVerboseLevel(LogLevel verboseLevel) {
+	public void setVerboseLevel(LogLevel verboseLevel, boolean initalize) {
 		VerboseLevel = verboseLevel;
-		this.log(LogLevel.INFO, "VerboseLevel set to " + verboseLevel);
+		if (!initalize) {
+			this.log(LogLevel.INFO, "VerboseLevel set to " + verboseLevel);
+		}
 	}
 
 	public void log(LogLevel VerboseLevel, String Content) {
