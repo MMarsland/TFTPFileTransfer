@@ -115,7 +115,6 @@ public class Server {
 	 * @param args Command line arguments
 	 */
 	public static void main(String[] args) throws InterruptedException {
-		
 		logger.log(LogLevel.QUIET, "Starting Server..."); 
 		
 		//Initialize settings to default values
@@ -241,7 +240,7 @@ class ServerListener implements Runnable {
 	    		receiveSocket.receive(receivePacket);
 	    	} catch(IOException e) {
 	    		if(!e.getMessage().equals("socket closed")) {
-	    			// An IOException occurred listening for packages. (Nowhere to send errors, exit)
+	    			// An IOException occurred listening for packages. (Probably won't be able to listen again, we'd better die.)
 	    			logger.log(LogLevel.FATAL, "Error: SocketException. Reason: Listener Socket Failed to Recieve. Solution: Shutting down Server.");
 		    		e.printStackTrace();
 	    			System.exit(1);
@@ -498,6 +497,26 @@ class WriteHandler extends RequestHandler implements Runnable {
 	 */
 	public void run(){
 		logger.log(LogLevel.INFO, "Handling Write Request");
+		
+		// Parse the file name for validity
+		String fileDir = filename.substring(0, filename.lastIndexOf("/"));
+		System.out.println(fileDir);
+		File dirToTest = new File(fileDir);
+		if (dirToTest.isDirectory()) {
+			// The directory exists! We can try to write!
+			//Check if there's enough space!
+			if (dirToTest.getFreeSpace() > 0) {
+				// There is enough space! Proceed with the transaction!
+			} else {
+				// There is not enough space.
+				logger.log(LogLevel.ERROR, String.format("The file could not be written because there is not enough space. \""+filename+"\""));
+	    		sendErrorPacket(TFTPPacket.TFTPError.DISK_FULL, "The file be written because there is not enough space. \""+filename+"\"");
+			}
+		} else {
+			// The directory does not exists.
+			logger.log(LogLevel.ERROR, String.format("The file could not be written because its directory does not exist. \""+filename+"\""));
+    		sendErrorPacket(TFTPPacket.TFTPError.FILE_NOT_FOUND, "The file be written because its directory does not exist. \""+filename+"\"");
+		}
 		
 		// Set up and run the TFTP Transaction
 		try (TFTPTransaction transaction =
