@@ -145,7 +145,6 @@ class Errors {
 	/**
 	 * Creates a backup copy of the error list that can be restored at a later time
 	 */
-	@SuppressWarnings("unchecked")
 	public synchronized void backupErrors() {
 		errorsBackup.clear();
 		int i;
