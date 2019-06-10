@@ -449,10 +449,14 @@ class ReadHandler extends RequestHandler implements Runnable {
 		    		logger.log(LogLevel.ERROR, String.format("File IOError trying to open the file for reading for an unknown reason."));
 		    		sendErrorPacket(TFTPPacket.TFTPError.ERROR, "The file \""+filename+"\" could not be opened for reading for an unknown reason.");
 		    	}
+		    } else if (fileToTest.isDirectory()) {
+		    	// The "File" is a directory
+		    	logger.log(LogLevel.ERROR, String.format("The file could not be read because it is a directory: \"%s\".", filename));
+		    	sendErrorPacket(TFTPPacket.TFTPError.FILE_NOT_FOUND, String.format("The file could not be read because it is a directory: \"%s\".", filename));
 		    } else {
-		    	// The file does not exist or is already a directory!
+		    	// The file does not exist!
 		    	logger.log(LogLevel.ERROR, String.format("File not found on Server: \"%s\".", filename));
-		    	sendErrorPacket(TFTPPacket.TFTPError.FILE_NOT_FOUND, "The file \""+filename+"\" could not be found on the Server. (May be a directory)");
+		    	sendErrorPacket(TFTPPacket.TFTPError.FILE_NOT_FOUND, "The file \""+filename+"\" could not be found on the Server.");
 		    }
 		} catch (IOException e) {
 			logger.log(LogLevel.ERROR, "Error: File Closure. Reason: Failed to close file when terminating transaction. Solution: Ending Transaction without closing file.");
