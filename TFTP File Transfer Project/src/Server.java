@@ -509,12 +509,14 @@ class WriteHandler extends RequestHandler implements Runnable {
 			} else {
 				// There is not enough space.
 				logger.log(LogLevel.ERROR, String.format("The file could not be written because there is not enough space. \""+filename+"\""));
-	    		sendErrorPacket(TFTPPacket.TFTPError.DISK_FULL, "The file be written because there is not enough space. \""+filename+"\"");
+	    		sendErrorPacket(TFTPPacket.TFTPError.DISK_FULL, "The file could not be written because there is not enough space. \""+filename+"\"");
+	    		return;
 			}
 		} else {
 			// The directory does not exists.
 			logger.log(LogLevel.ERROR, String.format("The file could not be written because its directory does not exist. \""+filename+"\""));
-    		sendErrorPacket(TFTPPacket.TFTPError.FILE_NOT_FOUND, "The file be written because its directory does not exist. \""+filename+"\"");
+    		sendErrorPacket(TFTPPacket.TFTPError.FILE_NOT_FOUND, "The file could not be written because its directory does not exist. \""+filename+"\"");
+    		return;
 		}
 		
 		// Set up and run the TFTP Transaction
