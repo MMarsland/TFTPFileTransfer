@@ -17,10 +17,10 @@ import org.apache.commons.cli.ParseException;
 
 /**
  * A TFTP Client program for a client-server project
- * 
+ *
  * Follows TFTP standards, but cannot handle all errors.
  * Currently handles: incorrect packet types, delayed/duplicated packets, lost packets
- * 
+ *
  * @author Scott Malonda
  *
  */
@@ -32,38 +32,37 @@ public class Client {
 	 */
 	private int serverPort;
 	private static Logger log = new Logger();
-	
+
 	private InetAddress serverAddress;
-	
+
 	public void setServerAddress(InetAddress serverAddress) {
 		this.serverAddress = serverAddress;
 	}
-	
+
 
 	public Client(int serverPort, LogLevel verboseLevel, String logFilePath)
 	{
 		this.serverPort = serverPort;
-		
+
 		log.setVerboseLevel(verboseLevel, true);
-		
+
 		log.setLogFile(logFilePath, true);
-		
+
 		log.log(LogLevel.INFO,"Setting up send/receive socket.");
 	}
 
-	
+
 	/**
 	 * Checks the specified filepaths (source and dest) to see which one is on the server.
 	 * If source is the server file, calls getCmd().  If dest is on the server, calls putCmd().
 	 * The IP of the server is taken from the filepath to the server file.
-	 * 
 	 * @param source Filepath to the file that data will be taken from
 	 * @param dest Filepath to the file that data will be copied to
 	 * @param c Console object that will be passed to putCmd or getCmd
 	 */
 	public void buildRequest(String source, String dest, Console c)
 	{
-		
+
 		/*
 		 * Checking which file (source or dest) is on the server to determine the type of
 		 * request.
@@ -74,41 +73,41 @@ public class Client {
 			String split[] = source.split(":");
 			String addressString = split[0];
 			String filepath = split[1];
-			
+
 			try {
 				this.serverAddress = InetAddress.getByName(addressString);
 			} catch(UnknownHostException e) {
-				c.printerr(String.format("Unkown host \"%s\"", source));
+				c.printerr(String.format("Unknown host \"%s\"", source));
 				return;
 			}
-			
+
 			String args[] = {"getCmd", filepath, dest};
 			getCmd(c, args);
-			
+
 		} else if(dest.contains(":")) {		//Create and send a write request
 			String split[] = dest.split(":");
 			String addressString = split[0];
 			String filepath = split[1];
-			
+
 			try {
 				this.serverAddress = InetAddress.getByName(addressString);
 			} catch(UnknownHostException e) {
-				c.printerr(String.format("Unkown host \"%s\"", source));
+				c.printerr(String.format("Unknown host \"%s\"", source));
 				return;
 			}
-			
+
 			// Calls putCmd with the arguments determined from above
 			String args[] = {"putCmd", filepath, source};
 			putCmd(c, args);
-			
+
 		}
-		
+
 		else {	//If neither file is on the server, print an warning message and returns.
 			log.log(LogLevel.WARN,"Neither file is on the server.  Starting interactive mode.");
 		}
 		return;
 	}
-	
+
 	private void shutdown (Console c, String[] args) {
 		try {
 			c.close();
@@ -116,17 +115,17 @@ public class Client {
 			c.printerr("Error closing console thread.");
 			System.exit(1);
 		}
-		
+
 		log.log(LogLevel.QUIET, "Shutting Down Client...");
 		log.endLog();
 		System.exit(0);
 	}
-	
+
 	private void setVerboseCmd (Console c, String[] args) {
 		c.println("Running in verbose mode.");
 		log.setVerboseLevel(LogLevel.INFO, false);
 	}
-	
+
 	private void setLogfileCmd (Console c, String[] args) {
 		if (args.length < 2) {
 			// Not enough arguments
@@ -144,7 +143,7 @@ public class Client {
 		c.println("Running in quiet mode.");
 		log.setVerboseLevel(LogLevel.WARN, false);
 	}
-	
+
 	private void putCmd (Console c, String[] args) {
 		if (args.length < 2) {
 			// Not enough arguments
@@ -155,12 +154,12 @@ public class Client {
 			c.println("Too many arguments.");
 			return;
 		}
-		
+
 		if (this.serverAddress == null) {
 			c.println("No server specified. Use the connect command to choose a server.");
 			return;
 		}
-		
+
 		String remoteFile = "";
 		if (args.length == 2) {
 			// Remote name is the same as the local name
@@ -170,14 +169,14 @@ public class Client {
 			// Remote name is specified explicitly
 			remoteFile = args[2];
 		}
-		
+
 		// Aborts write request if the local file doesn't exist.
 		File clientFile = new File(args[1]);
 		if(!clientFile.isFile()) {
 			c.println("Local file doesn't exist.  Aborting write request");
 			return;
 		}
-		
+
 		// Create socket for request
 		DatagramSocket sendReceiveSocket = null;
 		try {
@@ -187,8 +186,8 @@ public class Client {
 			c.printerr("Could not create socket for transaction");
 			return;
 		}
-    	
-		try (TFTPTransaction transaction = 
+
+		try (TFTPTransaction transaction =
 				new TFTPTransaction.TFTPSendTransaction(sendReceiveSocket,
 						serverAddress, serverPort, args[1], true,
 						Client.log);) {
@@ -197,21 +196,21 @@ public class Client {
 					TFTPPacket.TFTPMode.NETASCII);
 			DatagramPacket request = new DatagramPacket(writePacket.toBytes(),
 					writePacket.size(), serverAddress, serverPort);
-			
+
 			log.logPacket(LogLevel.INFO, request, writePacket, false, "server");
-			
+
 			try {
 				sendReceiveSocket.send(request);
 			} catch(IOException e) {
 				c.printerr("Failed to send request to server.");
 				return;
 			}
-			
+
 			transaction.run();
-			
+
 			// Print success message if transfer is complete or error message if
 			// transfer has failed.
-			
+
 			switch (transaction.getState()) {
 			case BLOCK_ZERO_TIMEOUT:
 				c.println("File transfer failed. Server did not respond to request.");
@@ -254,7 +253,7 @@ public class Client {
 				break;
 			default:
 				c.println(String.format(
-						"File transfer failed. Unkown error occured: \"%s\"", 
+						"File transfer failed. Unknown error occurred: \"%s\"",
 						transaction.getState().toString()));
 				break;
 			}
@@ -263,10 +262,10 @@ public class Client {
 		} catch (IOException e1) {
 			c.println("Error: Failed to close file after transaction completed.  Returning to interactive mode.");
 		}
-		
+
 		sendReceiveSocket.close();
 	}
-	
+
 	private void getCmd (Console c, String[] args) {
 		if (args.length < 2) {
 			// Not enough arguments
@@ -277,12 +276,12 @@ public class Client {
 			c.println("Too many arguments.");
 			return;
 		}
-		
+
 		if (this.serverAddress == null) {
 			c.println("No server specified. Use the connect command to choose a server.");
 			return;
 		}
-		
+
 		String localFile = "";
 		if (args.length == 2) {
 			// Local name is the same as the remote name
@@ -292,14 +291,14 @@ public class Client {
 			// Local name is specified explicitly
 			localFile = args[2];
 		}
-		
+
 		// Checks if the local file already exists to avoid overwriting files
 		File clientFile = new File(localFile);
 		if(clientFile.isFile()) {
 			c.println("Local file already exists.  Aborting write request.");
 			return;
 		}
-		
+
 		// Create socket for request
 		DatagramSocket sendReceiveSocket = null;
 		try {
@@ -319,16 +318,16 @@ public class Client {
 					TFTPPacket.TFTPMode.NETASCII);
 			DatagramPacket request = new DatagramPacket(readPacket.toBytes(),
 					readPacket.size(), serverAddress, serverPort);
-			
+
 			log.logPacket(LogLevel.INFO, request, readPacket, false, "server");
-			
+
 			try {
 				sendReceiveSocket.send(request);
 			} catch(IOException e) {
 				c.printerr("Error: Failed to send request to server.  Returning to interactive mode.");
 				return;
 			}
-			
+
 			transaction.run();
 
 			// Print success message if transfer is complete or error message if
@@ -366,14 +365,14 @@ public class Client {
 				c.println("File transfer failed. Server received bad packet.");
 				break;
 			case PEER_ERROR:
-				c.println("File transfer failed. Error occured on server.");
+				c.println("File transfer failed. Error occurred on server.");
 				break;
 			case PEER_FILE_NOT_FOUND:
 				c.println("File transfer failed. File not found on server.");
 				break;
 			default:
 				c.println(String.format(
-						"File transfer failed. Unkown error occured: \"%s\"", 
+						"File transfer failed. Unknown error occurred: \"%s\"",
 						transaction.getState().toString()));
 				break;
 			}
@@ -383,7 +382,7 @@ public class Client {
 		} catch (IOException e1) {
 			c.println("Error: Failed to close file after transaction completed.  Returning to interactive mode");
 		}
-		
+
 		sendReceiveSocket.close();
 	}
 
@@ -397,7 +396,7 @@ public class Client {
 			c.println("Too many arguments.");
 			return;
 		}
-		
+
 		try {
 			InetAddress address = InetAddress.getByName(args[1]);
 			this.setServerAddress(address);
@@ -417,19 +416,19 @@ public class Client {
 			c.println("Error: Invalid server: \"" + args[1] + "\".  Returning to interactive mode");
 		}
 	}
-	
+
 	private void setNormalCmd (Console c, String[] args) {
 		c.println("Running in normal mode (Sending to port 69)");
 		serverPort = 69;
 	}
-	
+
 	private void setTestCmd (Console c, String[] args) {
 		c.println("Running in test mode (Sending to port 23)");
 		serverPort = 23;
 	}
-	
+
 	private void helpCmd (Console c, String[] args) {
-		c.println("Avaliable Client Commands:");
+		c.println("Avalable Client Commands:");
 		c.println("connect [ip] <port> - Select a server, if port is not specified port 69 will be used.");
 		c.println("put [local filename] <remote filename> - Send a file to the server.");
 		c.println("get [remote filename] <local filename - Get a file from the server.");
@@ -439,19 +438,19 @@ public class Client {
 		c.println("test - Sets Client to send to port 23 (Error simulator port).");
 		c.println("normal - Sets Client to send to port 69 (Server port)");
 		c.println("shutdown - Shutdown client.");
-		
+
 	}
-	
+
 	public static void main(String[] args) {
 		log.log(LogLevel.QUIET,"Starting Client...");
-		
+
 		int serverPort = 69;
 		LogLevel verboseLevel = LogLevel.QUIET;
 		String logFilePath = "";
-		
+
 		//Setting up the parsing options
 		Option verboseOption = new Option( "v", "verbose", false, "print extra debug info" );
-		
+
 		Option serverPortOption = Option.builder("p").argName("server port")
                 .hasArg()
                 .desc("the port number of the server's listener")
@@ -463,27 +462,27 @@ public class Client {
                 .desc("The log file the client writes to")
                 .type(String.class)
                 .build();
-		
+
 		Options options = new Options();
 		options.addOption(verboseOption);
 		options.addOption(serverPortOption);
 		options.addOption(logFilePathOption);
-		
+
 		CommandLine line = null;
-		
+
 		CommandLineParser parser = new DefaultParser();
 	    try {
 	        // parse the command line arguments
 	        line = parser.parse( options, args );
-	        
+
 	        if( line.hasOption("verbose")) {
 	        	verboseLevel = LogLevel.INFO;
 		    }
-	        
+
 	        if( line.hasOption("p")) {
 		        serverPort = Integer.parseInt(line.getOptionValue("p"));
 		    }
-	        
+
 	        if( line.hasOption("l")) {
 	        	logFilePath = line.getOptionValue("l");
 	        }
@@ -491,9 +490,9 @@ public class Client {
 	    	log.log(LogLevel.FATAL, "Fatal Error: Command line argument parsing failed.  Reason: " + exp.getMessage() );
 		    System.exit(1);
 	    }
-	    
+
 	    Client client = new Client(serverPort,verboseLevel,logFilePath);
-	    
+
 	    // Create console UI
 	    Map<String, Console.CommandCallback> commands = Map.ofEntries(
 				Map.entry("shutdown", client::shutdown),
@@ -509,7 +508,7 @@ public class Client {
 				);
 
 		Console console = new Console(commands);
-	    
+
 	    // Get the positional arguments and perform a transaction if one is specified
 		String[] positionalArgs = line.getArgs();
 		if (positionalArgs.length == 1) {
