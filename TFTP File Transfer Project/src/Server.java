@@ -197,6 +197,8 @@ class ServerListener implements Runnable {
 	private DatagramSocket  receiveSocket;
 	private int listenerPort;
 	private Logger logger;
+	
+	private boolean shouldExit = false;
 
 
 	/**
@@ -241,10 +243,9 @@ class ServerListener implements Runnable {
 	    	try {
 	    		receiveSocket.receive(receivePacket);
 	    	} catch(IOException e) {
-	    		if(!e.getMessage().equals("socket closed")) {
+	    		if(!shouldExit) {
 	    			// An IOException occurred listening for packages. (Nowhere to send errors, exit)
 	    			logger.log(LogLevel.FATAL, "Error: SocketException. Reason: Listener Socket Failed to Recieve. Solution: Shutting down Server.");
-		    		e.printStackTrace();
 	    			System.exit(1);
 	    		} else {
 	    			// The socket was closed to shutdown the listener thread.
@@ -312,6 +313,7 @@ class ServerListener implements Runnable {
 	 */
 	public void close()
 	{
+		this.shouldExit = true;
 	    receiveSocket.close();
 	}
 }
