@@ -499,9 +499,8 @@ class WriteHandler extends RequestHandler implements Runnable {
 		logger.log(LogLevel.INFO, "Handling Write Request");
 		
 		// Parse the file name for validity
-		String fileDir = filename.substring(0, filename.lastIndexOf("/"));
-		System.out.println(fileDir);
-		File dirToTest = new File(fileDir);
+		File fileToTest = new File(filename);
+		File dirToTest = fileToTest.getParentFile();
 		if (dirToTest.isDirectory()) {
 			// The directory exists! We can try to write!
 			//Check if there's enough space!
@@ -563,7 +562,7 @@ class WriteHandler extends RequestHandler implements Runnable {
 			}
 		} catch (FileNotFoundException e) {
 			// If the file does not exist,is a directory rather than a regular file,or for some other reason cannot be opened for writing.
-		    File fileToTest = new File(filename);
+		    fileToTest = new File(filename);
 		    if (fileToTest.exists() && fileToTest.isFile())
 		    {
 		        // The file exists and is a file.. Must be an access violation (or some other error)
