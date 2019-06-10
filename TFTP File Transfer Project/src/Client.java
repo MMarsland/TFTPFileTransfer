@@ -485,7 +485,13 @@ public class Client {
 		    System.exit(1);
 	    }
 	    
+	    // Creating a client and initializing the server address to the local host address
 	    Client client = new Client(serverPort,verboseLevel,logFilePath);
+	    try {
+	    	client.setServerAddress(InetAddress.getLocalHost());
+	    } catch(UnknownHostException e) {
+	    	log.log(LogLevel.FATAL, "Could not initialize server address to local host address.  Please specify server address.");
+	    }
 	    
 	    // Create console UI
 	    Map<String, Console.CommandCallback> commands = Map.ofEntries(
