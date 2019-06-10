@@ -20,25 +20,25 @@ import org.apache.commons.cli.*;
 class Errors {
 	private LinkedList<ErrorInstruction> errors = new LinkedList<ErrorInstruction>();
 	private LinkedList<ErrorInstruction> errorsBackup = new LinkedList<ErrorInstruction>();
-	
+
 	/**
 	 * Adds a new ErrorInstruction to the error simulators already pending errors
 	 * @param error the new error to add
 	 * @return true if the error was added, false if it already exists
 	 */
 	public synchronized boolean add(ErrorInstruction error) {
-		
+
 		//Don't allow adding duplicate commands
 		for(ErrorInstruction ei : errors) {
 			if(ei.equals(error)) {
 				return false;
 			}
 		}
-		
+
 		errors.add(error);
 		return true;
 	}
-	
+
 	/**
 	 * Removes an error from the pending errors
 	 * @param error the error to remove
@@ -47,7 +47,7 @@ class Errors {
 	public synchronized boolean remove(ErrorInstruction error) {
 		return errors.remove(error);
 	}
-	
+
 	/**
 	 * Removes an error from the pending errors
 	 * @param error the error number to remove
@@ -59,7 +59,7 @@ class Errors {
 		}
 		return false;
 	}
-	
+
 	/**
 	 * Checks a packet to see if any of the pending errors are applicable to it
 	 * @param packet the packet to check
@@ -69,13 +69,13 @@ class Errors {
 		if(errors.size() == 0) {
 			return null;
 		}
-		
+
 		TFTPPacket parsedPacket = TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength()));
-		
+
 		int i;
 		for(i = 0; i < errors.size(); i++) {
 			ErrorInstruction ei = errors.get(i);
-			
+
 			if(ei.packetType == ErrorInstruction.packetTypes.RRQ && parsedPacket instanceof TFTPPacket.RRQ) {
 				if(ei.skipped == ei.packetNumber) {
 					ei.occurances++;
@@ -101,7 +101,7 @@ class Errors {
 				ei.skipped++;
 			}
 			else if(ei.packetType == ErrorInstruction.packetTypes.DATA && parsedPacket instanceof TFTPPacket.DATA) {
-				TFTPPacket.DATA data = (TFTPPacket.DATA)parsedPacket; 
+				TFTPPacket.DATA data = (TFTPPacket.DATA)parsedPacket;
 				if(data.getBlockNum() == ei.packetNumber) {
 					ei.occurances++;
 					if(ei.occurances == ei.timesToPerform) {
@@ -114,7 +114,7 @@ class Errors {
 				ei.skipped++;
 			}
 			else if(ei.packetType == ErrorInstruction.packetTypes.ACK && parsedPacket instanceof TFTPPacket.ACK) {
-				TFTPPacket.ACK ack = (TFTPPacket.ACK)parsedPacket; 
+				TFTPPacket.ACK ack = (TFTPPacket.ACK)parsedPacket;
 				if(ack.getBlockNum() == ei.packetNumber) {
 					ei.occurances++;
 					if(ei.occurances == ei.timesToPerform) {
@@ -141,7 +141,7 @@ class Errors {
 		}
 		return null;
 	}
-	
+
 	/**
 	 * Creates a backup copy of the error list that can be restored at a later time
 	 */
@@ -152,7 +152,7 @@ class Errors {
 			errorsBackup.add(errors.get(i).clone());
 		}
 	}
-	
+
 	/**
 	 * Restores the backup error list
 	 */
@@ -163,19 +163,19 @@ class Errors {
 			errors.add(errorsBackup.get(i).clone());
 		}
 	}
-	
+
 	/**
 	 * Provides a list of all pending errors
 	 */
 	public String toString() {
-		
+
 		if(errors.size() == 0) {
 			return "No errors pending creation.";
 		}
 		String desc = "";
-		
+
 		desc += "The following errors will created:\n";
-		
+
 		int i = 1;
 		for(ErrorInstruction ei : errors) {
 			desc += i + ". " + ei.toString() + "\n";
@@ -189,18 +189,18 @@ class Errors {
  * ErrorInstruction class represents an network error that the error simulator should simulate
  */
 class ErrorInstruction {
-	
+
 	//All possible packet types that an error can be applied to
 	enum packetTypes{
 		RRQ, WRQ, DATA, ACK, ERROR
 	}
-	
+
 	//All possible error types that can be created
 	enum errorTypes{
-		DROP, DUPLICATE, DELAY, INVALIDATE_TID, INVALIDATE_OPCODE, INVALIDATE_MODE, INVALIDATE_SHRINK, 
+		DROP, DUPLICATE, DELAY, INVALIDATE_TID, INVALIDATE_OPCODE, INVALIDATE_MODE, INVALIDATE_SHRINK,
 		INVALIDATE_RMZ, INVALIDATE_APPEND, INVALIDATE_BLOCKNUM, INVALIDATE_ERRORNUM
 	}
-	
+
 	packetTypes packetType;
 	errorTypes errorType;
 	int packetNumber;
@@ -208,7 +208,7 @@ class ErrorInstruction {
 	int timesToPerform;
 	int occurances;
 	int skipped = 0;
-	
+
 	/**
 	 * Constructor for ErrorInstruction
 	 * @param packetType the type of packet this error applies to
@@ -260,14 +260,14 @@ class ErrorInstruction {
 		if(errorType == errorTypes.INVALIDATE_MODE && !(packetType == packetTypes.RRQ || packetType == packetTypes.WRQ)) {
 			throw new IllegalArgumentException("command not applicable to packet type");
 		}
-		
+
 		this.packetType = packetType;
 		this.errorType = errorType;
 		this.packetNumber = packetNumber;
 		this.param1 = param1;
 		this.timesToPerform = timesToPerform;
 	}
-	
+
 	/**
 	 * Checks if two ErrorInstructions are equivalent
 	 */
@@ -275,13 +275,13 @@ class ErrorInstruction {
 		if(this == o) {
 			return true;
 		}
-		
+
 		if(!(o instanceof ErrorInstruction)){
 			return false;
 		}
-		
+
 		ErrorInstruction error = (ErrorInstruction)o;
-		
+
 		if(this.packetType != error.packetType ||
 		   this.errorType != error.errorType) {
 			return false;
@@ -291,13 +291,13 @@ class ErrorInstruction {
 				this.timesToPerform == error.timesToPerform &&
 				this.occurances == error.occurances;
 	}
-	
+
 	/**
 	 * Provides a string representation of an ErrorInstruction
 	 */
 	public String toString() {
 		String desc = "";
-		
+
 		switch(errorType) {
 		case DROP:
 			desc = "Drop " + getPacketName(packetType) + " " + packetNumber + ". ";
@@ -341,7 +341,7 @@ class ErrorInstruction {
 			desc = "Replace the error number of " + getPacketName(packetType) + " " + packetNumber + " with " + param1 + ". ";
 			break;
 		}
-		
+
 		if(timesToPerform < 0) {
 			desc += "Repeat forever.";
 		}
@@ -350,24 +350,24 @@ class ErrorInstruction {
 		}
 		return desc;
 	}
-	
+
 	public ErrorInstruction clone() {
 		ErrorInstruction ei = new ErrorInstruction(this.packetType, this.errorType, this.packetNumber, this.param1, this.timesToPerform);
 		ei.occurances = this.occurances;
 		ei.skipped = this.skipped;
 		return ei;
 	}
-	
+
 	/**
 	 * Modifies the data in a packet according to the error
 	 * @param packet The packet whose data should be modified
 	 * @return the modified data
 	 */
 	public byte[] modifyPacket(DatagramPacket packet) {
-		
+
 		if(this.errorType == errorTypes.INVALIDATE_APPEND) {
 			byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength() + this.param1);
-			
+
 			int i;
 			for(i = packet.getLength(); i < temp.length; i++) {
 				temp[i] = (byte)((Math.random() * 254) + 1);
@@ -399,7 +399,7 @@ class ErrorInstruction {
 				int start;
 				//Find the start of the mode string
 				for(start=2; (start < packet.getLength()) && temp[start] != 0; start++) {}
-				
+
 				//Copy everything except the mode string into a new array
 				byte[] toReturn = new byte[start + 2];
 				System.arraycopy(temp, 0, toReturn, 0, start);
@@ -416,18 +416,18 @@ class ErrorInstruction {
 			}
 		}
 		else if(this.errorType == errorTypes.INVALIDATE_RMZ) {
-			//Either removing the last 0 in an EEROR packet, or the last 0 in a WRQ/RRQ packet
+			//Either removing the last 0 in an ERROR packet, or the last 0 in a WRQ/RRQ packet
 			if(this.param1 == 0 || this.param1 == 2) {
 				return Arrays.copyOf(packet.getData(), packet.getLength()-1);
 			}
-			else if(packet.getLength() > 4){ 
+			else if(packet.getLength() > 4){
 				//Remove the first 0 in a WRQ/RRQ
 				byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
 				int pos;
-				
+
 				//Find the first 0 byte
 				for(pos=2; (pos < temp.length) && temp[pos] != 0; pos++) {}
-				
+
 				//Copy everything except the first 0 byte into a new array
 				byte[] toReturn = new byte[packet.getLength()-1];
 				System.arraycopy(temp, 0, toReturn, 0, pos);
@@ -447,7 +447,7 @@ class ErrorInstruction {
 		}
 		return packet.getData(); //Return the original data if the packet does not need to be modified
 	}
-	
+
 	/**
 	 * Converts a string into a PacketType
 	 * @param typeString a string representing a packet type
@@ -469,7 +469,7 @@ class ErrorInstruction {
 			return null;
 		}
 	}
-	
+
 	/**
 	 * Converts a packetType into a string
 	 * @param type a packetType enum to be converted into a string
@@ -510,8 +510,8 @@ class ErrorSimClientListener{
     private Thread knownPortListenerThread;
     private Thread TIDPortListenerThread;
     boolean verbose;
-    
-	
+
+
     /**
      * Constructor for ErrorSimClientListener
      * @param port the port to listen to client on
@@ -522,21 +522,21 @@ class ErrorSimClientListener{
 		this.clientPort = port;
 		this.verbose = verbose;
 		this.errorSim = errorSim;
-		
+
 		try { //Set up the socket that will be used to receive packets from client on known port
 			knownSocket = new DatagramSocket(port);
 		} catch (SocketException se) { // Can't create the socket.
 			se.printStackTrace();
 			System.exit(1);
 	    }
-		
+
 		try { //Set up the socket that will be used to communicate with TID port
 			TIDSocket = new DatagramSocket();
 		} catch (SocketException se) { // Can't create the socket.
 			se.printStackTrace();
 			System.exit(1);
 	    }
-		
+
 		sendTimer = new Timer();
 		invalidTIDSendTimer = new Timer();
 		knownPortListener = new SocketListener(knownSocket);
@@ -544,7 +544,7 @@ class ErrorSimClientListener{
 		knownPortListenerThread = new Thread(knownPortListener);
 		TIDPortListenerThread = new Thread(TIDPortListener);
 	}
-	
+
 	/**
 	 * Sends a packet to the client and applies any applicable pending errors to it
 	 * @param packet the packet to send
@@ -555,7 +555,7 @@ class ErrorSimClientListener{
 			System.out.println("Applying the following error before sending packet to client:");
 			System.out.println(ei);
 			System.out.print("\n");
-		
+
 			if(ei.errorType == ErrorInstruction.errorTypes.DUPLICATE) {
 				//Send the packet now, and its duplicate later
 				sendTimer.schedule(new DelayedSendToClient(packet.getData(), packet.getLength()), 0);
@@ -573,7 +573,7 @@ class ErrorSimClientListener{
 				invalidTIDSendTimer.schedule(new InvalidTIDSendToClient(packet.getData(), packet.getLength()), 0);
 			}
 			else {
-				//Modify the packet according to the error and send it 
+				//Modify the packet according to the error and send it
 				byte[] temp = ei.modifyPacket(packet);
 				sendTimer.schedule(new DelayedSendToClient(temp, temp.length), 0);
 			}
@@ -591,7 +591,7 @@ class ErrorSimClientListener{
 		knownPortListenerThread.start();
 		TIDPortListenerThread.start();
 	}
-	
+
 	/**
 	 * Gets the port that this listens to for new requests from the client
 	 * @return the port number
@@ -599,7 +599,7 @@ class ErrorSimClientListener{
 	public int getClientKnownPort() {
 		return clientPort;
 	}
-	
+
 	/**
 	 * sets the known port that this listens to for new requests from the client
 	 * @param port the port number
@@ -613,12 +613,12 @@ class ErrorSimClientListener{
 			se.printStackTrace();
 			System.exit(1);
 	    }
-		
+
 		knownPortListener = new SocketListener(knownSocket);
 		knownPortListenerThread = new Thread(knownPortListener);
 		knownPortListenerThread.start();
 	}
-	
+
 	/**
 	 * stops the ErrorSimClientListener
 	 */
@@ -628,7 +628,7 @@ class ErrorSimClientListener{
 	    knownSocket.close();
 	    TIDSocket.close();
 	}
-	
+
 	/**
 	 * Cancels the sending of all delayed packets
 	 */
@@ -642,7 +642,7 @@ class ErrorSimClientListener{
 			invalidTIDSendTimer = new Timer(); //Restart the timer
 		}
 	}
-	
+
 	/**
 	 * Sets the TID port
 	 * @param port the port number
@@ -650,7 +650,7 @@ class ErrorSimClientListener{
 	private synchronized void setClientPort(int port){
 		clientPort = port;
 	}
-	
+
 	/**
 	 * Sets the IP address of the client
 	 * @param address the IP address
@@ -658,7 +658,7 @@ class ErrorSimClientListener{
 	private synchronized void setClientAddress(InetAddress address){
 		clientAddress = address;
 	}
-	
+
 	/**
 	 * Waits to receive a packet from the client
 	 * @param socket the socket to listen to
@@ -669,7 +669,7 @@ class ErrorSimClientListener{
 		byte data[] = new byte[TFTPPacket.MAX_SIZE];
 	    DatagramPacket packet = new DatagramPacket(data, data.length);
 	    TFTPPacket TFTPpacket;
-	    
+
     	try { //Wait for a packet to come in from the client.
     		socket.receive(packet);
     	} catch(IOException e) {
@@ -679,10 +679,10 @@ class ErrorSimClientListener{
     		e.printStackTrace();
 			System.exit(1);
     	}
-    	
+
     	try {
     	    TFTPpacket = TFTPPacket.parse(Arrays.copyOf(packet.getData(), packet.getLength()));
-    	    
+
     	    //Check if this is the start of a new transaction. If it is, cancel all the pending delayed packets
     	    if(TFTPpacket instanceof TFTPPacket.WRQ || TFTPpacket instanceof TFTPPacket.RRQ) {
     	    	errorSim.clientListener.cancelDelayedSend();
@@ -691,9 +691,9 @@ class ErrorSimClientListener{
     	    }
     	}
     	catch(IllegalArgumentException e) {
-    	
+
     	}
-    	
+
     	if(verbose) {
     		System.out.println("Received packet from client.");
     	    System.out.println("From address: " + packet.getAddress());
@@ -707,16 +707,16 @@ class ErrorSimClientListener{
 	    	}
     	    System.out.print("\n");
     	}
-    	
+
     	return packet;
 	}
-	
+
 	/**
 	 * Listens to a socket on a new thread so the ErrorSimClientListener can listen to multiple sockets at the same time
 	 */
 	private class SocketListener implements Runnable{
 		private DatagramSocket socket;
-		
+
 		/**
 		 * Constructor for SocketListener
 		 * @param socket the socket to listen to
@@ -724,21 +724,21 @@ class ErrorSimClientListener{
 		public SocketListener(DatagramSocket socket) {
 			this.socket = socket;
 		}
-		
+
 		/**
 		 * The overridden run method for this thread
 		 */
 		public void run() {
 			DatagramPacket receivePacket;
-		    
-			while(true) {	
+
+			while(true) {
 				receivePacket = receiveFromClient(socket);
-	    	
+
 				if(receivePacket == null) {
 					return;
 				}
 				setClientAddress(receivePacket.getAddress());
-				setClientPort(receivePacket.getPort());	
+				setClientPort(receivePacket.getPort());
 				errorSim.serverListener.sendToServer(receivePacket);
 			}
 		}
@@ -760,14 +760,14 @@ class ErrorSimClientListener{
 			this.data = data;
 			this.length = length;
 		}
-		
+
 		/**
 		 * The overridden run method for this thread
 		 */
 		public synchronized void run() {
-			
+
 			DatagramPacket packet = new DatagramPacket(data, length, clientAddress, clientPort);
-			
+
 			if(verbose) {
 	    		System.out.println("Sending packet to client.");
 	    	    System.out.println("To address: " + packet.getAddress());
@@ -781,7 +781,7 @@ class ErrorSimClientListener{
 		    	}
 	    	    System.out.print("\n");
 	    	}
-			
+
 			try { //Send the packet to the client
 	    		TIDSocket.send(packet);
 	    	} catch (IOException e) {
@@ -792,9 +792,9 @@ class ErrorSimClientListener{
 				System.exit(1);
 	    	}
 			this.cancel();
-		}	
+		}
 	}
-	
+
 	/**
 	 * InvalidTIDSendToClient class allows a packet to be sent to the client with the wrong TID
 	 */
@@ -811,24 +811,24 @@ class ErrorSimClientListener{
 			this.data = data;
 			this.length = length;
 		}
-		
+
 		/**
 		 * The overridden run method for this thread
 		 */
 		public void run() {
 			DatagramSocket UnknownTIDSocket = null;
-			
+
 			try { //Set up the socket that will be used to send from an unknown TID
 				UnknownTIDSocket = new DatagramSocket();
 			} catch (SocketException se) { // Can't create the socket.
 				se.printStackTrace();
 				System.exit(1);
 		    }
-			
+
 			DatagramPacket packet = new DatagramPacket(data, length, clientAddress, clientPort);
-			
+
 			System.out.println("Sending packet to client with invalid TID.");
-			
+
 			if(verbose) {
 	    	    System.out.println("To address: " + packet.getAddress());
 	    	    System.out.println("To port: " + packet.getPort());
@@ -841,7 +841,7 @@ class ErrorSimClientListener{
 		    	}
 	    	    System.out.print("\n");
 	    	}
-			
+
 			try { //Send the packet to the client
 	    		UnknownTIDSocket.send(packet);
 	    	} catch (IOException e) {
@@ -851,7 +851,7 @@ class ErrorSimClientListener{
 	    		e.printStackTrace();
 				System.exit(1);
 	    	}
-			
+
 			try { //Wait for a packet to come in from the client.
 				UnknownTIDSocket.receive(packet);
 	    	} catch(IOException e) {
@@ -861,9 +861,9 @@ class ErrorSimClientListener{
 	    		e.printStackTrace();
 				System.exit(1);
 	    	}
-	    	
-			System.out.println("Received packet from client in resonse to invalid TID.");
-			
+
+			System.out.println("Received packet from client in response to invalid TID.");
+
 	    	if(verbose) {
 	    	    System.out.println("From address: " + packet.getAddress());
 	    	    System.out.println("From port: " + packet.getPort());
@@ -877,7 +877,7 @@ class ErrorSimClientListener{
 	    	    System.out.print("\n");
 	    	}
 			this.cancel();
-		}	
+		}
 	}
 }
 
@@ -893,7 +893,7 @@ class ErrorSimServerListener implements Runnable {
     private Timer sendTimer;
     private Timer invalidTIDSendTimer;
     boolean verbose;
-	
+
     /**
      * Constructor for ErrorSimServerListener
      * @param port the servers known port
@@ -906,18 +906,18 @@ class ErrorSimServerListener implements Runnable {
 		serverAddress = address;
 		this.verbose = verbose;
 		this.errorSim = errorSim;
-		
+
 		try { //Set up the socket that will be used to communicate with the server
 			socket = new DatagramSocket();
 		} catch (SocketException se) { // Can't create the socket.
 			se.printStackTrace();
 			System.exit(1);
 	    }
-		
+
 		sendTimer = new Timer();
 		invalidTIDSendTimer = new Timer();
 	}
-	
+
 	/**
 	 * Sends a packet to the server
 	 * @param packet the packet to send
@@ -928,7 +928,7 @@ class ErrorSimServerListener implements Runnable {
 			System.out.println("Applying the following error before sending packet to server:");
 			System.out.println(ei);
 			System.out.print("\n");
-		
+
 			if(ei.errorType == ErrorInstruction.errorTypes.DUPLICATE) {
 				//Send the packet now, and its duplicate later
 				sendTimer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), 0);
@@ -946,7 +946,7 @@ class ErrorSimServerListener implements Runnable {
 				invalidTIDSendTimer.schedule(new InvalidTIDSendToServer(packet.getData(), packet.getLength()), 0);
 			}
 			else {
-				//Modify the packet according to the error and send it 
+				//Modify the packet according to the error and send it
 				byte[] temp = ei.modifyPacket(packet);
 				sendTimer.schedule(new DelayedSendToServer(temp, temp.length), 0);
 			}
@@ -956,7 +956,7 @@ class ErrorSimServerListener implements Runnable {
 			sendTimer.schedule(new DelayedSendToServer(packet.getData(), packet.getLength()), 0);
 		}
 	}
-	
+
 	/**
 	 * Gets the servers known port
 	 * @return the port number
@@ -964,7 +964,7 @@ class ErrorSimServerListener implements Runnable {
 	public int getServerKnownPort() {
 		return serverPort;
 	}
-	
+
 	/**
 	 * Gets the servers IP address
 	 * @return the IP address
@@ -972,7 +972,7 @@ class ErrorSimServerListener implements Runnable {
 	public InetAddress getServerAddress() {
 		return serverAddress;
 	}
-	
+
 	/**
 	 * Closes the ErrorSimServerListener
 	 */
@@ -995,16 +995,16 @@ class ErrorSimServerListener implements Runnable {
 			invalidTIDSendTimer = new Timer(); //Restart the timer
 		}
 	}
-	
+
 	/**
 	 * The overridden run method for this thread
 	 */
 	public void run() {
 	    DatagramPacket receivePacket;
-		
+
 	    while(true){
 	    	receivePacket = receiveFromServer();
-    	
+
 	    	if(receivePacket == null) {
 	    		return;
 	    	}
@@ -1014,7 +1014,7 @@ class ErrorSimServerListener implements Runnable {
 	    	errorSim.clientListener.sendToClient(receivePacket);
 	    }
 	}
-	
+
 	/**
 	 * sets the TID used to communicate with the server
 	 * @param port the port number
@@ -1022,7 +1022,7 @@ class ErrorSimServerListener implements Runnable {
 	private synchronized void setServerTID(int port){
 		serverTID = port;
 	}
-	
+
 	/**
 	 * Waits to receive a packet from the server
 	 * @return the packet if one was received, or null if the socket was closed
@@ -1031,7 +1031,7 @@ class ErrorSimServerListener implements Runnable {
 
 		byte data[] = new byte[TFTPPacket.MAX_SIZE];
 	    DatagramPacket packet = new DatagramPacket(data, data.length);
-	    
+
     	try { //Wait for a packet to come in from the client.
     		socket.receive(packet);
     	} catch(IOException e) {
@@ -1041,7 +1041,7 @@ class ErrorSimServerListener implements Runnable {
     		e.printStackTrace();
 			System.exit(1);
     	}
-    	
+
     	if(verbose) {
     		System.out.println("Received packet from server.");
     	    System.out.println("From address: " + packet.getAddress());
@@ -1055,10 +1055,10 @@ class ErrorSimServerListener implements Runnable {
 	    	}
     	    System.out.print("\n");
     	}
-    	
+
     	return packet;
 	}
-	
+
 	/**
 	 * DelayedSendToServer class allows a packet to be sent at some time in the future
 	 */
@@ -1075,20 +1075,20 @@ class ErrorSimServerListener implements Runnable {
 			this.data = data;
 			this.length = length;
 		}
-		
+
 		/**
 		 * The overridden run method
 		 */
 		public synchronized void run() {
 			DatagramPacket packet;
-			
+
 			if(length > 1 && (data[1] == 1 || data[1] == 2)) {
 				packet = new DatagramPacket(data, length, serverAddress, serverPort);
 			}
 			else {
 				packet = new DatagramPacket(data, length, serverAddress, serverTID);
 			}
-			
+
 			if(verbose) {
 	    		System.out.println("Sending packet to server.");
 	    	    System.out.println("To address: " + packet.getAddress());
@@ -1102,7 +1102,7 @@ class ErrorSimServerListener implements Runnable {
 	    	    }
 	    	    System.out.print("\n");
 	    	}
-			
+
 			try { //Send the packet to the client
 	    		socket.send(packet);
 	    	} catch (IOException e) {
@@ -1113,9 +1113,9 @@ class ErrorSimServerListener implements Runnable {
 				System.exit(1);
 	    	}
 			this.cancel();
-		}	
+		}
 	}
-	
+
 	/**
 	 * InvalidTIDSendToServer class allows a packet to be sent to the client with the wrong TID
 	 */
@@ -1132,28 +1132,28 @@ class ErrorSimServerListener implements Runnable {
 			this.data = data;
 			this.length = length;
 		}
-		
+
 		/**
 		 * The overridden run method for this thread
 		 */
 		public void run() {
 			DatagramSocket UnknownTIDSocket = null;
 			DatagramPacket packet;
-			
+
 			try { //Set up the socket that will be used to send from an unknown TID
 				UnknownTIDSocket = new DatagramSocket();
 			} catch (SocketException se) { // Can't create the socket.
 				se.printStackTrace();
 				System.exit(1);
 		    }
-			
+
 			if(length > 1 && (data[1] == 1 || data[1] == 2)) {
 				packet = new DatagramPacket(data, length, serverAddress, serverPort);
 			}
 			else {
 				packet = new DatagramPacket(data, length, serverAddress, serverTID);
 			}
-			
+
 			if(verbose) {
 	    		System.out.println("Sending packet to server with invalid TID.");
 	    	    System.out.println("To address: " + packet.getAddress());
@@ -1167,7 +1167,7 @@ class ErrorSimServerListener implements Runnable {
 		    	}
 	    	    System.out.print("\n");
 	    	}
-			
+
 			try { //Send the packet to the server
 	    		UnknownTIDSocket.send(packet);
 	    	} catch (IOException e) {
@@ -1177,7 +1177,7 @@ class ErrorSimServerListener implements Runnable {
 	    		e.printStackTrace();
 				System.exit(1);
 	    	}
-			
+
 			try { //Wait for a packet to come in from the server.
 				UnknownTIDSocket.receive(packet);
 	    	} catch(IOException e) {
@@ -1187,9 +1187,9 @@ class ErrorSimServerListener implements Runnable {
 	    		e.printStackTrace();
 				System.exit(1);
 	    	}
-	    	
+
 	    	if(verbose) {
-	    		System.out.println("Received packet from server in resonse to invalid TID.");
+	    		System.out.println("Received packet from server in response to invalid TID.");
 	    	    System.out.println("From address: " + packet.getAddress());
 	    	    System.out.println("From port: " + packet.getPort());
 	    	    System.out.println("Length: " + packet.getLength());
@@ -1202,7 +1202,7 @@ class ErrorSimServerListener implements Runnable {
 	    	    System.out.print("\n");
 	    	}
 			this.cancel();
-		}	
+		}
 	}
 }
 
@@ -1214,7 +1214,7 @@ public class ErrorSim {
 	public ErrorSimServerListener serverListener;
 	private Thread serverListenerThread;
 	public Errors errors;
-	
+
 	/**
 	 * Constructor for the error sim class
 	 * @param clientPort the port to listen to client requests on
@@ -1225,13 +1225,13 @@ public class ErrorSim {
 	public ErrorSim (int clientPort, int serverPort, InetAddress serverAddress, boolean verbose) {
 		//Create the errors instance
 		errors = new Errors();
-		
+
 		//Create the listeners
 		clientListener = new ErrorSimClientListener(clientPort, verbose, this);
 		serverListener = new ErrorSimServerListener(serverPort, serverAddress, verbose, this);
 		serverListenerThread = new Thread(serverListener);
 	}
-	
+
 	/**
 	 * Starts the error simulator listener threads
 	 */
@@ -1239,7 +1239,7 @@ public class ErrorSim {
 		clientListener.start();
 		serverListenerThread.start();
 	}
-	
+
 	//Handles the shutdown command
 	private void shutdown (Console c, String[] args) {
 		if(args.length > 1) {
@@ -1263,7 +1263,7 @@ public class ErrorSim {
 			System.exit(0);
 		}
 	}
-	
+
 	//Handles the verbose command
 	private void setVerboseCmd (Console c, String[] args) {
 		if(args.length > 1) {
@@ -1274,7 +1274,7 @@ public class ErrorSim {
 			c.println("Running in verbose mode.");
 		}
 	}
-	
+
 	//Handles the quiet command
 	private void setQuietCmd (Console c, String[] args) {
 		if(args.length > 1) {
@@ -1285,7 +1285,7 @@ public class ErrorSim {
 			c.println("Running in quiet mode.");
 		}
 	}
-	
+
 	//Handles the clientport command
 	private void setClientPortCmd (Console c, String[] args) {
 		if(args.length > 2) {
@@ -1294,7 +1294,7 @@ public class ErrorSim {
 			c.println("Client port: " + this.clientListener.getClientKnownPort());
 		} else if(args.length == 2) {
 			int port = Integer.parseInt(args[1]);
-			
+
 			if(port > 0 && port < 65536) {
 				clientListener.setClientKnownPort(port);
 				c.println("Client port set to: " + port);
@@ -1304,7 +1304,7 @@ public class ErrorSim {
 			}
 		}
 	}
-	
+
 	//Handles the serverport command
 	private void setServerPortCmd (Console c, String[] args) {
 		if(args.length > 2) {
@@ -1313,11 +1313,11 @@ public class ErrorSim {
 			c.println("Server port: " + this.serverListener.getServerKnownPort());
 		} else if(args.length == 2) {
 			int port = Integer.parseInt(args[1]);
-			
+
 			if(port > 0 && port < 65536) {
 				InetAddress serverAddress = this.serverListener.getServerAddress();
 				boolean verbose = this.clientListener.verbose;
-				
+
 				serverListener.close();
 				try {
 					serverListenerThread.join();
@@ -1335,7 +1335,7 @@ public class ErrorSim {
 			}
 		}
 	}
-	
+
 	//Handles the serverip command
 	private void setServerIPCmd (Console c, String[] args) {
 		if(args.length > 2) {
@@ -1346,12 +1346,12 @@ public class ErrorSim {
 			try {
 				int serverPort = this.serverListener.getServerKnownPort();
 				boolean verbose = this.serverListener.verbose;
-				
+
 				InetAddress serverAddress = InetAddress.getByName(args[1]);
-				
+
 				serverListener.close();
 				serverListenerThread.join();
-				
+
 				//Restart the listener
 				serverListener = new ErrorSimServerListener(serverPort, serverAddress, verbose, this);
 				serverListenerThread = new Thread(serverListener);
@@ -1364,15 +1364,15 @@ public class ErrorSim {
 			}
 		}
 	}
-	
+
 	//Handles the drop command
 	private void dropCmd (Console c, String[] args) {
 		if(args.length > 4) {
 			c.println("Error: Too many parameters.");
-		} 
+		}
 		else if(args.length < 4){
 			c.println("Error: Not enough parameters.");
-		} 
+		}
 		else {
 			if(ErrorInstruction.getPacketType(args[1]) == null) {
 				c.println("Error: Invalid packet type");
@@ -1380,7 +1380,7 @@ public class ErrorSim {
 			}
 
 			try {
-				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]),
 						ErrorInstruction.errorTypes.DROP, 	//Error type
 						Integer.parseInt(args[2]),			//Packet number
 						0,									//Time delay - not used here
@@ -1394,15 +1394,15 @@ public class ErrorSim {
 			}
 		}
 	}
-	
+
 	//Handles the delay command
 	private void delayCmd (Console c, String[] args) {
 		if(args.length > 5) {
 			c.println("Error: Too many parameters.");
-		} 
+		}
 		else if(args.length < 5){
 			c.println("Error: Not enough parameters.");
-		} 
+		}
 		else {
 			if(ErrorInstruction.getPacketType(args[1]) == null) {
 				c.println("Error: Invalid packet type");
@@ -1410,7 +1410,7 @@ public class ErrorSim {
 			}
 
 			try {
-				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]),
 						ErrorInstruction.errorTypes.DELAY, 	//Error type
 						Integer.parseInt(args[2]),			//Packet number
 						Integer.parseInt(args[3]),			//Time delay
@@ -1424,12 +1424,12 @@ public class ErrorSim {
 			}
 		}
 	}
-	
+
 	//Handles the duplicate command
 	private void duplicateCmd (Console c, String[] args) {
 		if(args.length > 5) {
 			c.println("Error: Too many parameters.");
-		} 
+		}
 		else if(args.length < 5){
 			c.println("Error: Not enough parameters.");
 		}
@@ -1440,7 +1440,7 @@ public class ErrorSim {
 			}
 
 			try {
-				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]),
 						ErrorInstruction.errorTypes.DUPLICATE, 	//Error type
 						Integer.parseInt(args[2]),				//Packet number
 						Integer.parseInt(args[3]),				//Time delay
@@ -1454,7 +1454,7 @@ public class ErrorSim {
 			}
 		}
 	}
-	
+
 	//Handles the invd_tid command
 	private void invdTIDCmd (Console c, String[] args) {
 		if(args.length > 4) {
@@ -1468,9 +1468,9 @@ public class ErrorSim {
 				c.println("Error: Invalid packet type");
 				return;
 			}
-			
+
 			try {
-				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]),
 						ErrorInstruction.errorTypes.INVALIDATE_TID, //Error type
 						Integer.parseInt(args[2]),					//Packet Number
 						0,											//param1 - not used here
@@ -1484,7 +1484,7 @@ public class ErrorSim {
 			}
 		}
 	}
-	
+
 	//Handles the invd_opcode command
 	private void invdOpcodeCmd (Console c, String[] args) {
 		if(args.length > 4) {
@@ -1500,9 +1500,9 @@ public class ErrorSim {
 				c.println("Error: Invalid packet type");
 				return;
 			}
-			
+
 			try {
-				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]),
 						ErrorInstruction.errorTypes.INVALIDATE_OPCODE,	//Error type
 						Integer.parseInt(args[2]),						//Packet Number
 						0,												//param1 - not used here
@@ -1516,7 +1516,7 @@ public class ErrorSim {
 			}
 		}
 	}
-	
+
 	//Handles the invd_mode command
 	private void invdModeCmd (Console c, String[] args) {
 		if(args.length > 4) {
@@ -1530,9 +1530,9 @@ public class ErrorSim {
 				c.println("Error: Invalid packet type");
 				return;
 			}
-			
+
 			try {
-				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]),
 						ErrorInstruction.errorTypes.INVALIDATE_MODE,	//Error type
 						Integer.parseInt(args[2]),						//Packet Number
 						0,												//param1 - not used here
@@ -1544,9 +1544,9 @@ public class ErrorSim {
 			catch(IllegalArgumentException e) {
 				c.println("Could not create error: " + e.getMessage());
 			}
-		}				
+		}
 	}
-	
+
 	//Handles the invd_shrink command
 	private void invdShrinkCmd (Console c, String[] args) {
 		if(args.length > 4) {
@@ -1560,9 +1560,9 @@ public class ErrorSim {
 				c.println("Error: Invalid packet type");
 				return;
 			}
-			
+
 			try {
-				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]),
 						ErrorInstruction.errorTypes.INVALIDATE_SHRINK,	//Error type
 						Integer.parseInt(args[2]),						//Packet Number
 						0,												//param1 - not used here
@@ -1574,9 +1574,9 @@ public class ErrorSim {
 			catch(IllegalArgumentException e) {
 				c.println("Could not create error: " + e.getMessage());
 			}
-		}					
+		}
 	}
-	
+
 	//Handles the invd_rmz command
 	private void invdRmzCmd (Console c, String[] args) {
 		if(args.length > 5) {
@@ -1592,7 +1592,7 @@ public class ErrorSim {
 			}
 			if(args.length == 5) {
 				try {
-					errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+					errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]),
 							ErrorInstruction.errorTypes.INVALIDATE_RMZ,	//Error type
 							Integer.parseInt(args[2]),					//Packet Number
 							Integer.parseInt(args[3]),					//param1 - new which zero byte to remove (1 or 2)
@@ -1607,7 +1607,7 @@ public class ErrorSim {
 			}
 			else {
 				try {
-					errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+					errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]),
 							ErrorInstruction.errorTypes.INVALIDATE_RMZ,	//Error type
 							Integer.parseInt(args[2]),					//Packet Number
 							0,											//param1 - not used here
@@ -1617,9 +1617,9 @@ public class ErrorSim {
 					c.println("Could not create error: " + e.getMessage());
 				}
 			}
-		}					
+		}
 	}
-	
+
 	//Handles the invd_append command
 	private void invdAppendCmd (Console c, String[] args) {
 		if(args.length > 5) {
@@ -1633,9 +1633,9 @@ public class ErrorSim {
 				c.println("Error: Invalid packet type");
 				return;
 			}
-			
+
 			try {
-				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]),
 						ErrorInstruction.errorTypes.INVALIDATE_APPEND,	//Error type
 						Integer.parseInt(args[2]),						//Packet Number
 						Integer.parseInt(args[3]),						//param1 - how many bytes to append
@@ -1647,9 +1647,9 @@ public class ErrorSim {
 			catch(IllegalArgumentException e) {
 				c.println("Could not create error: " + e.getMessage());
 			}
-		}					
+		}
 	}
-	
+
 	//Handles the invd_blocknum command
 	private void invdBlocknumCmd (Console c, String[] args) {
 		if(args.length > 5) {
@@ -1663,9 +1663,9 @@ public class ErrorSim {
 				c.println("Error: Invalid packet type");
 				return;
 			}
-			
+
 			try {
-				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]),
 						ErrorInstruction.errorTypes.INVALIDATE_BLOCKNUM,	//Error type
 						Integer.parseInt(args[2]),							//Packet Number
 						Integer.parseInt(args[3]),							//param1 - new block number
@@ -1677,9 +1677,9 @@ public class ErrorSim {
 			catch(IllegalArgumentException e) {
 				c.println("Could not create error: " + e.getMessage());
 			}
-		}					
+		}
 	}
-	
+
 	//Handles the invd_errornum command
 	private void invdErrornumCmd (Console c, String[] args) {
 		if(args.length > 5) {
@@ -1693,9 +1693,9 @@ public class ErrorSim {
 				c.println("Error: Invalid packet type");
 				return;
 			}
-			
+
 			try {
-				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]), 
+				errors.add(new ErrorInstruction(ErrorInstruction.getPacketType(args[1]),
 						ErrorInstruction.errorTypes.INVALIDATE_ERRORNUM,	//Error type
 						Integer.parseInt(args[2]),							//Packet Number
 						Integer.parseInt(args[3]),							//param1 - new error number
@@ -1707,9 +1707,9 @@ public class ErrorSim {
 			catch(IllegalArgumentException e) {
 				c.println("Could not create error: " + e.getMessage());
 			}
-		}						
+		}
 	}
-		
+
 	//Handles the errors command
 	private void errorsCmd (Console c, String[] args) {
 		if(args.length > 1) {
@@ -1719,7 +1719,7 @@ public class ErrorSim {
 			c.println(errors.toString());
 		}
 	}
-	
+
 	//Handles the remove command
 	private void removeCmd (Console c, String[] args) {
 		if(args.length > 2) {
@@ -1730,7 +1730,7 @@ public class ErrorSim {
 		}
 		else {
 			int errornum = Integer.parseInt(args[1]);
-		
+
 			if(errornum < 1) {
 				c.println("Error: Invalid argument.");
 			}
@@ -1747,7 +1747,7 @@ public class ErrorSim {
 			}
 		}
 	}
-	
+
 	//Handles the recall command
 	private void recallCmd (Console c, String[] args) {
 		if(args.length > 1) {
@@ -1758,7 +1758,7 @@ public class ErrorSim {
 			c.println("Errors recalled to previous state.");
 		}
 	}
-	
+
 	//Handles the reset command
 	private void resetCmd (Console c, String[] args) {
 		if(args.length > 1) {
@@ -1770,7 +1770,7 @@ public class ErrorSim {
 			c.println("Cleared all remaining errors.");
 		}
 	}
-	
+
 	//Handles the help command
 	private void helpCmd (Console c, String[] args) {
 		c.println("The following is a list of commands and their usage:");
@@ -1863,14 +1863,14 @@ public class ErrorSim {
 		c.println("        [# of times] - how many times this error should be created.");
 		c.println("");
 		c.println("help - Displays this message.");
-	}	
+	}
 
 	/**
 	 * main function for the error simulator
 	 * @param args Command line arguments
 	 */
 	public static void main(String[] args) {
-		
+
 		//Initialize settings to default values
 		Boolean verbose = false;
 		int serverPort = 69;
@@ -1882,48 +1882,48 @@ public class ErrorSim {
 			e.printStackTrace();
 			System.exit(1);
 		}
-		
+
 		//Setup command line parser
 		Option verboseOption = new Option( "v", "verbose", false, "print extra debug info" );
-		
+
 		Option serverPortOption = Option.builder("sp").argName("server port")
                 .hasArg()
                 .desc("the port number of the servers listener")
                 .type(Integer.TYPE)
                 .build();
-		
+
 		Option serverAddressOption = Option.builder("sa").argName("server address")
                 .hasArg()
                 .desc("the IP address of the server")
                 .type(String.class)
                 .build();
-		
+
 		Option clientPortOption = Option.builder("cp").argName("client port")
                 .hasArg()
                 .desc("the port number to listen to client requests on")
                 .type(Integer.TYPE)
                 .build();
-		
+
 		Options options = new Options();
 
 		options.addOption(verboseOption);
 		options.addOption(serverPortOption);
 		options.addOption(serverAddressOption);
 		options.addOption(clientPortOption);
-		
+
 		CommandLineParser parser = new DefaultParser();
 	    try {
 	        // parse the command line arguments
 	        CommandLine line = parser.parse( options, args );
-	        
+
 	        if( line.hasOption("verbose")) {
 		        verbose = true;
 		    }
-	        
+
 	        if( line.hasOption("sp")) {
 		        serverPort = Integer.parseInt(line.getOptionValue("sp"));
 		    }
-	        
+
 	        if( line.hasOption("sa")) {
 		        try {
 					serverAddress = InetAddress.getByName((String)line.getParsedOptionValue("sa"));
@@ -1931,27 +1931,27 @@ public class ErrorSim {
 					e.printStackTrace();
 				}
 		    }
-	        
+
 	        if( line.hasOption("cp")) {
 	        	clientPort = Integer.parseInt(line.getOptionValue("cp"));
-		    } 
+		    }
 	    }
 	    catch( ParseException exp ) {
 	        System.err.println( "Command line argument parsing failed.  Reason: " + exp.getMessage() );
 	        System.exit(1);
 	    }
-		
+
 		System.out.println("Starting Error Simulator...");
-		
+
 		if(verbose) {
 			System.out.println("Listening to client on port " + clientPort);
 			System.out.println("Server address: " + serverAddress + " port " + serverPort + "\n");
 		}
-		
+
 		// Create and start ErrorSim instance
 		ErrorSim errorSim = new ErrorSim (clientPort, serverPort, serverAddress, verbose);
 		errorSim.start();
-		
+
 		// Create and start console UI thread
 		Map<String, Console.CommandCallback> commands = Map.ofEntries(
 				Map.entry("shutdown", errorSim::shutdown),
@@ -1977,9 +1977,9 @@ public class ErrorSim {
 				Map.entry("reset", errorSim::resetCmd),
 				Map.entry("help", errorSim::helpCmd)
 				);
-		
+
 		Console console = new Console(commands);
-		
+
 		Thread consoleThread = new Thread(console);
 		consoleThread.start();
 	}
