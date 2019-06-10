@@ -49,6 +49,12 @@ public class Client {
 		log.setLogFile(logFilePath, true);
 		
 		log.log(LogLevel.INFO,"Setting up send/receive socket.");
+		
+		try {
+			serverAddress = InetAddress.getLocalHost();
+		} catch(UnknownHostException e) {
+			log.log(LogLevel.QUIET, "Unable to initialize server address to local host.  Creating client anyways");
+		}
 	}
 
 	
