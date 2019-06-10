@@ -23,24 +23,24 @@ import org.apache.commons.cli.ParseException;
  * Server class handles the setup of the Server and acts as the UI thread.
  */
 public class Server {
-	
+
 	private ServerListener listener;
 	private Thread listenerThread;
 	private static Logger logger = new Logger();
-	
+
 	public Server(int serverPort, LogLevel verboseLevel, String logFilePath) {
-		
+
 		logger.setVerboseLevel(verboseLevel, true);
 		logger.setLogFile(logFilePath, true);
-		
+
 		this.listener = new ServerListener(serverPort, logger);
 		this.listenerThread = new Thread(listener);
 	}
-	
+
 	public void start () {
 		listenerThread.start();
 	}
-	
+
 	private void shutdown (Console c, String[] args) {
 		if(args.length > 1) {
 			c.println("Error: Too many parameters.");
@@ -68,7 +68,7 @@ public class Server {
 			logger.setVerboseLevel(LogLevel.INFO, false);
 		}
 	}
-	
+
 	private void setQuietCmd (Console c, String[] args) {
 		if(args.length > 1) {
 			c.println("Error: Too many parameters.");
@@ -78,7 +78,7 @@ public class Server {
 			logger.setVerboseLevel(LogLevel.QUIET, false);
 		}
 	}
-	
+
 	private void setLogfileCmd (Console c, String[] args) {
 		if (args.length < 2) {
 			// Not enough arguments
@@ -91,7 +91,7 @@ public class Server {
 		}
 		logger.setLogFile(args[1], false);
 	}
-	
+
 	private void setServerPortCmd (Console c, String[] args) {
 		if(args.length > 2) {
 			c.println("Error: Too many parameters.");
@@ -100,63 +100,64 @@ public class Server {
 			c.println("Server port: " + this.listener.getPort());
 		}
 	}
-	
+
 	private void helpCmd (Console c, String[] args) {
-		c.println("The following is a list of commands and thier usage:");
+		c.println("The following is a list of commands and their usage:");
 		c.println("shutdown - Closes the Server.");
 		c.println("verbose - Makes the server output more detailed information.");
 		c.println("quiet - Makes the server output only basic information.");
+		c.println("logfile <filename> - Makes the server write displayed information to a log file on shutdown.");
 		c.println("serverport - Outputs the port currently being used to listen to requests");
 		c.println("help - Shows help information.");
 	}
-	
+
 	/**
 	 * main function for the server
 	 * @param args Command line arguments
 	 */
 	public static void main(String[] args) throws InterruptedException {
-		
-		logger.log(LogLevel.QUIET, "Starting Server..."); 
-		
+
+		logger.log(LogLevel.QUIET, "Starting Server...");
+
 		//Initialize settings to default values
 		LogLevel verboseLevel = LogLevel.QUIET;
 		int serverPort = 69;
 		String logFilePath = "";
-		
+
 		//Setup command line parser
 		Option verboseOption = new Option( "v", "verbose", false, "print extra debug info" );
-		
+
 		Option serverPortOption = Option.builder("p").argName("server port")
                 .hasArg()
                 .desc("the port number of the servers listener")
                 .type(Integer.TYPE)
                 .build();
-		
+
 		Option logFilePathOption = Option.builder("l").argName("log file path")
                 .hasArg()
                 .desc("The log file the server writes to")
                 .type(String.class)
                 .build();
-		
+
 		Options options = new Options();
 
 		options.addOption(verboseOption);
 		options.addOption(serverPortOption);
 		options.addOption(logFilePathOption);
-		
+
 		CommandLineParser parser = new DefaultParser();
 	    try {
 	        // parse the command line arguments
 	        CommandLine line = parser.parse( options, args );
-	        
+
 	        if( line.hasOption("verbose")) {
 		        verboseLevel = LogLevel.INFO;
 		    }
-	        
+
 	        if( line.hasOption("p")) {
 		        serverPort = Integer.parseInt(line.getOptionValue("p"));
 		    }
-	        
+
 	        if( line.hasOption("l")) {
 	        	logFilePath = line.getOptionValue("l");
 	        }
@@ -165,11 +166,11 @@ public class Server {
 	        logger.log(LogLevel.FATAL, "Command line argument parsing failed.  Reason: " + exp.getMessage() );
 	        System.exit(1);
 	    }
-		
+
 		// Create server instance and start it
 	    Server server = new Server(serverPort, verboseLevel, logFilePath);
 		server.start();
-		
+
 		// Create and start console UI thread
 		Map<String, Console.CommandCallback> commands = Map.ofEntries(
 				Map.entry("shutdown", server::shutdown),
@@ -189,15 +190,15 @@ public class Server {
 
 
 /**
- * ErrorSimListener class handles incoming communications from the client 
+ * ErrorSimListener class handles incoming communications from the client
  * and creates the appropriate handler threads to handle the requests.
  */
 class ServerListener implements Runnable {
 	private DatagramSocket  receiveSocket;
 	private int listenerPort;
 	private Logger logger;
-	
-	
+
+
 	/**
 	 * Constructor for the SeverListener class.
 	 * @param listenerPort The port that will listen to requests from the client.
@@ -207,9 +208,9 @@ class ServerListener implements Runnable {
 	public ServerListener(int listenerPort, Logger logger) {
 		this.listenerPort = listenerPort;
 		this.logger = logger;
-		
+
 		// Set up the socket that will be used to receive packets from clients (or error simulators)
-		try { 
+		try {
 			receiveSocket = new DatagramSocket(listenerPort);
 		} catch (SocketException se) { // Can't create the socket.
 			logger.log(LogLevel.FATAL, "Error: SocketException. Reason: Could not create listener socket. Solution: Shutting down Server.");
@@ -217,7 +218,7 @@ class ServerListener implements Runnable {
 			System.exit(1);
 	    }
 	}
-	
+
 	/**
 	 * Get the port that the listener is listening on
 	 * @return The port that the listener is listening on
@@ -225,19 +226,19 @@ class ServerListener implements Runnable {
 	public int getPort() {
 		return listenerPort;
 	}
-	
+
 	/**
 	 * The run method required to implement Runnable.
 	 */
 	public void run(){
 		byte data[] = new byte[TFTPPacket.MAX_SIZE];
 	    DatagramPacket receivePacket = new DatagramPacket(data, data.length);
-	    
+
 	    while(!Thread.interrupted()) {
 	        logger.log(LogLevel.INFO, "Listening for packets on port "+this.listenerPort+"...");
-	    	
+
 	    	// Wait for a packet to come in from the client.
-	    	try { 	    		
+	    	try {
 	    		receiveSocket.receive(receivePacket);
 	    	} catch(IOException e) {
 	    		if(!e.getMessage().equals("socket closed")) {
@@ -250,41 +251,41 @@ class ServerListener implements Runnable {
 	    			return;
 	    		}
 	    	}
-	    
+
 	        logger.log(LogLevel.INFO, "New Request Received:");
-	    
+
 	    	// Parse the packet to determine the type of handler required
 	    	try {
 				TFTPPacket request = TFTPPacket.parse(Arrays.copyOf(receivePacket.getData(), receivePacket.getLength()));
-				
+
 		    	// Create a handler thread
 				if (request instanceof TFTPPacket.RRQ) {
 					logger.log(LogLevel.QUIET, "Received a read request.");
 					logger.log(LogLevel.INFO, "Creating a read handler for this request.");
-							
+
 					ReadHandler handler = new ReadHandler(receivePacket, (TFTPPacket.RRQ) request, logger);
 					Thread handlerThread = new Thread(handler);
 					handlerThread.start();
-					
+
 		    	} else if (request instanceof TFTPPacket.WRQ) {
 					logger.log(LogLevel.QUIET, "Received a write request.");
 					logger.log(LogLevel.INFO, "Creating a write handler for this request.");
-		    		
+
 		    		WriteHandler handler = new WriteHandler(receivePacket, (TFTPPacket.WRQ) request, logger);
 					Thread handlerThread = new Thread(handler);
 					handlerThread.start();
-						
+
 		    	} else if (request instanceof TFTPPacket.DATA) {
 		    		logger.log(LogLevel.ERROR, "Error: Unexpected DATA packet as first request. Reason: Not a read or write request. Solution: Print angry message and continue.");
 		    	} else if (request instanceof TFTPPacket.ACK) {
 		    		logger.log(LogLevel.ERROR, "Error: Unexpected ACK packet as first request. Reason: Not a read or write request. Solution: Print angry message and continue.");
 		    	} else if (request instanceof TFTPPacket.ERROR) {
 		    		logger.log(LogLevel.ERROR, "Error: Unexpected ERROR packet as first request. Reason: Not a read or write request. Solution: Print angry message and continue.");
-		    	} 
+		    	}
 			} catch (IllegalArgumentException e) {
 				// Unknown Packet Type... (Incorrect OP Code)
 	    		logger.log(LogLevel.ERROR, "Error: Unknown Packet Type. Reason: Not a valid TFTP Packet. Solution: Send Error Packet in return and continue.");
-	    		try { 
+	    		try {
 	    			DatagramSocket sendSocket = new DatagramSocket();
 	    			TFTPPacket.ERROR errorPacket = new TFTPPacket.ERROR(TFTPPacket.TFTPError.ILLEGAL_OPERATION, "The first request received by server must be a valid Read or Write Request. (OPCode: 01 or 02)");
 	    			DatagramPacket sendPacket = new DatagramPacket(errorPacket.toBytes(), errorPacket.size(), receivePacket.getAddress(), receivePacket.getPort());
@@ -304,7 +305,7 @@ class ServerListener implements Runnable {
 	    	// Return to listening for new requests
 	    }
 	}
-	
+
 	/**
 	 * Closes the sockets used by the listener to clean up resources
 	 * and also cause the listener thread to exit
@@ -322,9 +323,9 @@ class ServerListener implements Runnable {
 
 /** Abstract Class for Request Handlers. Allows inheritance for
  * ReadHandler and Write Handler for code simplification and cleaner
- * structure 
+ * structure
  */
- 
+
 abstract class RequestHandler implements Runnable {
 	protected DatagramSocket sendReceiveSocket;
 	protected DatagramPacket receivePacket;
@@ -332,10 +333,10 @@ abstract class RequestHandler implements Runnable {
 	protected InetAddress clientAddress;
 	protected String filename;
 	protected Logger logger;
-	
+
 	public abstract void run();
 	public void sendErrorPacket(TFTPPacket.TFTPError error, String description) {
-		try { 
+		try {
 			DatagramSocket sendSocket = new DatagramSocket();
 			TFTPPacket.ERROR errorPacket = new TFTPPacket.ERROR(error, description);
 			DatagramPacket sendPacket = new DatagramPacket(errorPacket.toBytes(), errorPacket.size(), clientAddress, clientTID);
@@ -358,14 +359,14 @@ abstract class RequestHandler implements Runnable {
 class ReadHandler extends RequestHandler implements Runnable {
 
 	protected TFTPPacket.RRQ request;
-	
+
 	/**
 	 * Constructor for the ReadHandler class.
 	 * @param receivePacket The DatagramPacket received for this request
 	 * @param request The formed TFTPPacket for the read request
 	 * @param verbose true enables verbose mode to output debug info, false disables verbose
 	 * mode so less information is output.
-	 * @throws SocketException 
+	 * @throws SocketException
 	 */
 	public ReadHandler(DatagramPacket receivePacket, TFTPPacket.RRQ request, Logger logger) throws SocketException {
 		logger.log(LogLevel.INFO, "Setting up read handler.");
@@ -375,7 +376,7 @@ class ReadHandler extends RequestHandler implements Runnable {
 		this.clientTID = this.receivePacket.getPort();
 		this.clientAddress = this.receivePacket.getAddress();
 		this.filename =  this.request.getFilename();
-		
+
 		//Set up the socket that will be used to send/receive packets to/from client
 		this.sendReceiveSocket = new DatagramSocket();
 		// Set Timeout for the socket!
@@ -387,12 +388,12 @@ class ReadHandler extends RequestHandler implements Runnable {
 	 */
 	public void run(){
 		logger.log(LogLevel.INFO,"Handling read request.");
-		
+
 		// Set up and run the TFTP Transaction
 		try (TFTPTransaction transaction =
 				new TFTPTransaction.TFTPSendTransaction(sendReceiveSocket,
 						clientAddress, clientTID, filename, false, logger)) {
-			
+
 			transaction.run();
 
 			// Print success message if transfer is complete or error message if transfer has failed.
@@ -429,21 +430,21 @@ class ReadHandler extends RequestHandler implements Runnable {
 				break;
 			default:
 				logger.log(LogLevel.FATAL, String.format(
-						"File transfer failed. Unkown error occured: \"%s\"", 
+						"File transfer failed. Unkown error occured: \"%s\"",
 						transaction.getState().toString()));
 				sendErrorPacket(TFTPPacket.TFTPError.ERROR, "The file transfer failed for an unknown reason. Terminating Transfer.");
 				break;
-				
+
 			}
-		} catch (FileNotFoundException e) {			
+		} catch (FileNotFoundException e) {
 			// If the file does not exist,is a directory rather than a regular file,or for some other reason cannot be opened for reading.
 		    File fileToTest = new File(filename);
 		    if (fileToTest.exists() && fileToTest.isFile())
 		    {
 		        // The file exists and is a file.. Must be an access violation (or some other error)
 		    	if(!fileToTest.canRead()) {
-		    		logger.log(LogLevel.ERROR, String.format("The file: "+filename+" could not be opened for reading due to access privalages."));
-		    		sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be opened for reading due to access privalages.");
+		    		logger.log(LogLevel.ERROR, String.format("The file: "+filename+" could not be opened for reading due to access privileges."));
+		    		sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be opened for reading due to access privileges.");
 		    	} else {
 		    		// Some other unknown error.
 		    		logger.log(LogLevel.ERROR, String.format("File IOError trying to open the file for reading for an unknown reason."));
@@ -468,14 +469,14 @@ class WriteHandler extends RequestHandler implements Runnable {
 
 	protected TFTPPacket.WRQ request;
 	protected TFTPPacket.TFTPMode mode;
-	
+
 	/**
 	 * Constructor for the WriteHandler class.
 	 * @param receivePacket The DatagramPacket received for this request
 	 * @param request The formed TFTPPacket for the write request
 	 * @param verbose true enables verbose mode to output debug info, false disables verbose
 	 * mode so less information is output.
-	 * @throws SocketException 
+	 * @throws SocketException
 	 */
 	public WriteHandler(DatagramPacket receivePacket, TFTPPacket.WRQ request, Logger logger) throws SocketException {
 		logger.log(LogLevel.INFO, "Setting up Write Handler");
@@ -486,8 +487,8 @@ class WriteHandler extends RequestHandler implements Runnable {
 		this.clientAddress = this.receivePacket.getAddress();
 		this.filename =  this.request.getFilename();
 		this.mode = this.request.getMode();
-		
-		//Set up the socket that will be used to send/receive packets to/from client 
+
+		//Set up the socket that will be used to send/receive packets to/from client
 		this.sendReceiveSocket = new DatagramSocket();
 		// Set Timeout for the socket!
 		sendReceiveSocket.setSoTimeout(TFTPPacket.TFTP_TIMEOUT);
@@ -498,14 +499,14 @@ class WriteHandler extends RequestHandler implements Runnable {
 	 */
 	public void run(){
 		logger.log(LogLevel.INFO, "Handling Write Request");
-		
+
 		// Set up and run the TFTP Transaction
 		try (TFTPTransaction transaction =
 				new TFTPTransaction.TFTPReceiveTransaction(sendReceiveSocket,
 						clientAddress, clientTID, filename, true, false, logger)) {
-			
+
 			transaction.run();
-			
+
 			// Print success message if transfer is complete or error message if transfer has failed.
 			switch (transaction.getState()) {
 				case BLOCK_ZERO_TIMEOUT:
@@ -537,7 +538,7 @@ class WriteHandler extends RequestHandler implements Runnable {
 					break;
 				default:
 					logger.log(LogLevel.FATAL, String.format(
-							"File transfer failed. Unkown error occured: \"%s\"", 
+							"File transfer failed. Unknown error occurred: \"%s\"",
 							transaction.getState().toString()));
 					sendErrorPacket(TFTPPacket.TFTPError.ERROR, "The file transfer failed for an unknown reason. Terminating Transfer.");
 					break;
