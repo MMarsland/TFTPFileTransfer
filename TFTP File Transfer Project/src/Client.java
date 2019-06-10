@@ -174,7 +174,10 @@ public class Client {
 		// Aborts write request if the local file doesn't exist.
 		File clientFile = new File(args[1]);
 		if(!clientFile.isFile()) {
-			c.println("Local file doesn't exist.  Aborting write request");
+			c.println("Local file doesn't exist.  Aborting write request.");
+			return;
+		} else if (!clientFile.canRead()) {
+			c.println("Local file could not be read.  Aborting write request.");
 			return;
 		}
 		
@@ -259,7 +262,8 @@ public class Client {
 				break;
 			}
 		} catch (FileNotFoundException e) {
-			c.println(String.format("Error: Could not access file: \"%s\".  Returning to interactive mode.", args[1]));
+			c.println(String.format("Error: Could not access file: \"%s\".  Free space on disk partition: %d", args[1], clientFile.getFreeSpace()));
+			c.println("Returning to interactive mode.");
 		} catch (IOException e1) {
 			c.println("Error: Failed to close file after transaction completed.  Returning to interactive mode.");
 		}
@@ -293,6 +297,12 @@ public class Client {
 			localFile = args[2];
 		}
 		
+		File clientFile = new File(localFile);
+		if(clientFile.isFile()) {
+			if(!clientFile.canWrite()) {
+				c.println("Local file exists but cannot be written to.  Aborting write request.");
+			}
+		}
 		// Create socket for request
 		DatagramSocket sendReceiveSocket = null;
 		try {
@@ -371,8 +381,8 @@ public class Client {
 				break;
 			}
 		} catch (FileNotFoundException e) {
-			c.println(String.format("Error: File could not be accessed: \"%s\".  Returning to interactive mode.", args[1]));
-			c.println("Aborting read request.");
+			c.println(String.format("Error: File could not be accessed: \"%s\".  Free space on disk partition: %d", args[1], clientFile.getFreeSpace()));
+			c.println("Returning to interactive mode.");
 		} catch (IOException e1) {
 			c.println("Error: Failed to close file after transaction completed.  Returning to interactive mode");
 		}
@@ -482,6 +492,8 @@ public class Client {
 	        }
 	    } catch( ParseException exp ) {
 	    	log.log(LogLevel.FATAL, "Fatal Error: Command line argument parsing failed.  Reason: " + exp.getMessage() );
+	    	log.log(LogLevel.QUIET, "Shutting Down Client...");
+			log.endLog();
 		    System.exit(1);
 	    }
 	    
