@@ -573,7 +573,7 @@ class WriteHandler extends RequestHandler implements Runnable {
 		    } else if (fileToTest.isDirectory()) {
 		    	// The "File" is a directory
 		    	logger.log(LogLevel.ERROR, String.format("The file could not be written because it is a directory: \"%s\".", filename));
-		    	sendErrorPacket(TFTPPacket.TFTPError.FILE_NOT_FOUND, String.format("The file could not be written because it is a directory: \"%s\".", filename));
+		    	sendErrorPacket(TFTPPacket.TFTPError.FILE_ALREADY_EXISTS, String.format("The file could not be written because it is a directory: \"%s\".", filename));
 		    } else {
 		    	// The file does not exist or is already a directory!
 		    	logger.log(LogLevel.ERROR, String.format("The file \""+filename+"\" could not be written due to its permissions."));
