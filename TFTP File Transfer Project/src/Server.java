@@ -562,7 +562,7 @@ class WriteHandler extends RequestHandler implements Runnable {
 			    		sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be opened for writing because it is read-only.");
 		    		} else {
 		    			// Some other reason it can't be written
-		    			logger.log(LogLevel.ERROR, String.format("The file: "+filename+" could not be opened for writing."));
+		    			logger.log(LogLevel.ERROR, String.format("The file: "+filename+" could not be opened for writing due to an access violation."));
 			    		sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be opened for writing due to an access violation.");
 		    		}
 		    	} else {
@@ -570,10 +570,14 @@ class WriteHandler extends RequestHandler implements Runnable {
 		    		logger.log(LogLevel.ERROR, String.format("The file \""+filename+"\" could not be opened for writing due to an unknown file IOError"));
 		    		sendErrorPacket(TFTPPacket.TFTPError.ERROR, "The file \""+filename+"\" could not be opened for writing due to an unknown file IOError");
 		    	}
+		    } else if (fileToTest.isDirectory()) {
+		    	// The "File" is a directory
+		    	logger.log(LogLevel.ERROR, String.format("The file could not be written because it is a directory: \"%s\".", filename));
+		    	sendErrorPacket(TFTPPacket.TFTPError.FILE_NOT_FOUND, String.format("The file could not be written because it is a directory: \"%s\".", filename));
 		    } else {
 		    	// The file does not exist or is already a directory!
-		    	logger.log(LogLevel.ERROR, String.format("The file \""+filename+"\" could not be written. May already be a directory."));
-		    	sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be written. May already be a directory.");
+		    	logger.log(LogLevel.ERROR, String.format("The file \""+filename+"\" could not be written due to its permissions."));
+		    	sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be written due to its permissions.");
 		    }
 		} catch (IOException e) {
 			logger.log(LogLevel.ERROR, "Error: File Closure. Reason: Failed to close file when terminating transaction. Solution: Ending Transaction without closing file.");
