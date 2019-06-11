@@ -185,7 +185,17 @@ public class Client {
 			c.println("Local file could not be read.  Aborting write request.");
 			return;
 		}
-
+		
+		// Find the total number of blocks to be sent
+		long numBlocks = 0;
+		numBlocks = (int)((clientFile.length() / TFTPPacket.BLOCK_SIZE) + 1);
+		// Check that file can be sent over TFTP
+		if (numBlocks > TFTPPacket.MAX_BLOCK_NUM) {
+			// Too many blocks
+			c.println(String.format("File to large to be transfered.  Aborting write request."));
+			return;
+		}
+		
 		// Create socket for request
 		DatagramSocket sendReceiveSocket = null;
 		try {
