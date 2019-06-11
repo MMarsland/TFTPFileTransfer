@@ -192,7 +192,7 @@ public class Client {
 		// Check that file can be sent over TFTP
 		if (numBlocks > TFTPPacket.MAX_BLOCK_NUM) {
 			// Too many blocks
-			c.println(String.format("File to large to be transfered.  Aborting file transfer."));
+			c.println(String.format("File to large too be transfered.  Aborting file transfer."));
 			return;
 		}
 		
