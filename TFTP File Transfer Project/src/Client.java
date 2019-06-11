@@ -179,10 +179,10 @@ public class Client {
 		// Aborts write request if the local file doesn't exist.
 		File clientFile = new File(args[1]);
 		if(!clientFile.isFile()) {
-			c.println("Local file doesn't exist.  Aborting write request.");
+			c.println("Local file doesn't exist.  Aborting file transfer.");
 			return;
 		} else if (!clientFile.canRead()) {
-			c.println("Local file could not be read.  Aborting write request.");
+			c.println("Local file could not be read.  Aborting file transfer.");
 			return;
 		}
 		
@@ -192,7 +192,7 @@ public class Client {
 		// Check that file can be sent over TFTP
 		if (numBlocks > TFTPPacket.MAX_BLOCK_NUM) {
 			// Too many blocks
-			c.println(String.format("File to large to be transfered.  Aborting write request."));
+			c.println(String.format("File to large to be transfered.  Aborting file transfer."));
 			return;
 		}
 		
@@ -311,11 +311,17 @@ public class Client {
 			// Local name is specified explicitly
 			localFile = args[2];
 		}
+		// Aborts the request if we don't have write permission to the file or if the filepath is to a
+		// directory.
 		File clientFile = new File(localFile);
 		if(clientFile.isFile()) {
 			if(!clientFile.canWrite()) {
-				c.println("Local file exists but cannot be written to.  Aborting write request.");
+				c.println("Local file exists but cannot be written to.  Aborting file transfer.");
+				return;
 			}
+		} else if(clientFile.isDirectory()) {
+			c.println("Local file is a directory, not a valid file type.  Aborting file transfer.");
+			return;
 		}
 		// Create socket for request
 		DatagramSocket sendReceiveSocket = null;
