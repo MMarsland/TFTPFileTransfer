@@ -1,2 +1,5 @@
 /bin/
 /.DS_Store
+/32KiB
+/.gitattributes
+/test_files
