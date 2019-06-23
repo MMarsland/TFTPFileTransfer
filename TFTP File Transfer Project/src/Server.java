@@ -197,6 +197,8 @@ class ServerListener implements Runnable {
 	private DatagramSocket  receiveSocket;
 	private int listenerPort;
 	private Logger logger;
+	
+	private boolean shouldExit = false;
 
 
 	/**
@@ -241,10 +243,9 @@ class ServerListener implements Runnable {
 	    	try {
 	    		receiveSocket.receive(receivePacket);
 	    	} catch(IOException e) {
-	    		if(!e.getMessage().equals("socket closed")) {
+	    		if(!shouldExit) {
 	    			// An IOException occurred listening for packages. (Nowhere to send errors, exit)
 	    			logger.log(LogLevel.FATAL, "Error: SocketException. Reason: Listener Socket Failed to Recieve. Solution: Shutting down Server.");
-		    		e.printStackTrace();
 	    			System.exit(1);
 	    		} else {
 	    			// The socket was closed to shutdown the listener thread.
@@ -312,6 +313,7 @@ class ServerListener implements Runnable {
 	 */
 	public void close()
 	{
+		this.shouldExit = true;
 	    receiveSocket.close();
 	}
 }
@@ -560,7 +562,7 @@ class WriteHandler extends RequestHandler implements Runnable {
 			    		sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be opened for writing because it is read-only.");
 		    		} else {
 		    			// Some other reason it can't be written
-		    			logger.log(LogLevel.ERROR, String.format("The file: "+filename+" could not be opened for writing."));
+		    			logger.log(LogLevel.ERROR, String.format("The file: "+filename+" could not be opened for writing due to an access violation."));
 			    		sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be opened for writing due to an access violation.");
 		    		}
 		    	} else {
@@ -568,10 +570,14 @@ class WriteHandler extends RequestHandler implements Runnable {
 		    		logger.log(LogLevel.ERROR, String.format("The file \""+filename+"\" could not be opened for writing due to an unknown file IOError"));
 		    		sendErrorPacket(TFTPPacket.TFTPError.ERROR, "The file \""+filename+"\" could not be opened for writing due to an unknown file IOError");
 		    	}
+		    } else if (fileToTest.isDirectory()) {
+		    	// The "File" is a directory
+		    	logger.log(LogLevel.ERROR, String.format("The file could not be written because it is a directory: \"%s\".", filename));
+		    	sendErrorPacket(TFTPPacket.TFTPError.FILE_ALREADY_EXISTS, String.format("The file could not be written because it is a directory: \"%s\".", filename));
 		    } else {
 		    	// The file does not exist or is already a directory!
-		    	logger.log(LogLevel.ERROR, String.format("The file \""+filename+"\" could not be written. May already be a directory."));
-		    	sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be written. May already be a directory.");
+		    	logger.log(LogLevel.ERROR, String.format("The file \""+filename+"\" could not be written due to its permissions."));
+		    	sendErrorPacket(TFTPPacket.TFTPError.ACCESS_VIOLATION, "The file \""+filename+"\" could not be written due to its permissions.");
 		    }
 		} catch (IOException e) {
 			logger.log(LogLevel.ERROR, "Error: File Closure. Reason: Failed to close file when terminating transaction. Solution: Ending Transaction without closing file.");
